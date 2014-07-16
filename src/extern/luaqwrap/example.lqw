@@ -80,6 +80,7 @@ typedef int (*socket_ep_cb)(co_obj_t *self, const char *endpoint);
 #CallBack SocketBindCB{self} socket_ep_cb 0: N{_} @ Socket{self} S{endpoint}
 #CallBack SocketConnectCB{self} socket_ep_cb 0: N{_} @ Socket{self} S{endpoint}
 
+
 typedef int (*socket_receive_cb)(co_obj_t *self, co_obj_t *fd, char *incoming, size_t length);
 #CallBack SocketReceiveCB{self} socket_receive_cb 0: L{incoming;_;65536} N{_} @ Socket{self} Fd{fd}
 

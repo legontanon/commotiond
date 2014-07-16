@@ -1,6 +1,6 @@
 /* vim: set ts=2 expandtab: */
 /**
- *       @file  colua.c
+ *       @file  colua.lqw
  *      @brief  a Commontiond API for the Lua programming Language
  *
  *     @author  Luis E. Garcia Ontanon <luis@ontanon.org>
@@ -30,7 +30,11 @@
  * =====================================================================================
  */
 
-/* the space between # and include disables parsing of the file */
+#Module Commotion static
+
+/* the space between # and include disables parsing of the include file by lqw */
+# include <sys/socket.h> // AF_INET
+# include <math.h> // floor()
 # include "config.h"
 # include "debug.h"
 #include "commotion.h"
@@ -48,10 +52,8 @@
 #include "socket.h"
 #include "util.h"
 
-#include <sys/socket.h> // AF_INET
-#include <math.h> // floor()
 
-#Module Commotion static
+tyepdef struct dummy {int i;} dummy_t;
 
 /* cmd.h */
 #Class Cmd co_str8_t
@@ -66,17 +68,28 @@
 
 /* list.h */
 #Class List co_obj_t
+
+/* loop.h */
+#OwnClass Loop dummy_t
 #Class Timer co_obj_t
+
+/* plugin.h */
 #Class Plugin co_obj_t
+
+/* process.h */
 #Class Process co_process_t
 #Class ProcessProf co_process_t
+
+/* profile.h */
 #Class Profile co_obj_t
+
+/* socket.h*/
 #Class Soket co_socket_t
 #Class USocket co_socket_t
 #Class Fd co_fd_t
 
-tyepdef struct dummy {int i;} dummy_t;
-#OwnClass Loop dummy_t
+#OwnClass Node dummy_t
+#OwnClass Debug dummy_t
 
 #OwnClass Obj co_obj_t
 
@@ -86,6 +99,28 @@ tyepdef struct dummy {int i;} dummy_t;
  */
 static co_obj_t* nil_obj = NULL;
 static const char* err = NULL;
+
+#define LwqForTable(idx,K,V) 
+
+/*
+ */
+
+
+#OwnFunction Debug.CLEAN_ERRNO
+LQW_MODE int Debug__clean_errno(luaState* L) {
+    CLEAN_ERRNO();
+    return 0;
+}
+
+#define DebugWrap(N) LQW_MODE int Debug__#N(luaState* L) { N(lqw_Fmt(L)); return 0 }
+
+#OwnFunction Debug.ERROR
+DebugWrap(ERROR)
+#OwnFunction Debug.ERROR
+DebugWrap(WARN)
+#OwnFunction Debug.INFO
+DebugWrap(INFO)
+
 
 
 /****************************************************************/
@@ -115,11 +150,13 @@ static co_obj_t* toObj(lua_State* L, int idx) {
         case LUA_TUSERDATA:
             return lua_touserdata(L,idx);
         case LUA_TTABLE:
+            /* 2do: table2obj() */
+        default:
+            Warn("Unimplemented");
         case LUA_TFUNCTION:
         case LUA_TTHREAD:
         case LUA_TLIGHTUSERDATA:    
-        default:
-            Warn("Unimplemented");
+            Warn("Invalid conversion");
         case LUA_TNIL:
             o = co_nil_create(CO_FLAG_LUAGC);
             break;
@@ -289,31 +326,43 @@ static int pushObj(lua_State* L, co_obj_t* o) {
 
 
 
+/**
+ * @brief sets node id using last four bytes of device's MAC address
+ * @param mac the MAC address of the device
+ * @param mac_size the size of the MAC address
+ */
+#Function Node.set_id_from_mac co_id_set_from_mac: @ L{mac,mac_size}
+void co_id_set_from_mac(const unsigned char *mac, int mac_size);
+
+/**
+ * @brief Converts node id from host byte order to network byte order
+ * @param n the node id (4 bytes)
+ */
+#Function Node.set_id co_id_set_from_int: @ N{n;uint32_t}
+
+/**
+ * @brief Returns nodeid
+ */
+#Function Node.get_id co_id_get: N{_->id} @
 
 
-
-
-/****************************************************************/
-/*! @class Commotion
- *  @brief a mechanism for registering and controlling display of commands
 
 /** @fn init
  * @brief initializes API
  */
-#Function init co_init: N{_} @
+#Function Node.init co_init: N{_} @
 
 /** @fn shutdown
  * @brief shuts down the API
  */
-#Function shutdown co_shutdown: N{_} @
-extern int co_shutdown(void);
+#Function Node.shutdown co_shutdown: N{_} @
 
 
 /** @fn Connection.connect(uri)
  * @brief creates a connection to Commotion daemon at the given URI
  * @param uri URI string
  */
-#Function connect co_connect: Connection{_} @ L{uri;ulen}
+#Function Node.connect co_connect: Connection{_} @ L{uri;ulen}
 
 /** @fn Request.create()
  * @brief closes connection to Commotion daemon
@@ -778,21 +827,18 @@ int co_loop_add_process(co_obj_t *proc);
 /**
  * @brief adds a new socket to the event loop (for it to listen on)
  * @param new_sock the new socket to be added
- * @param context a co_obj_t context pointer (currently unused)
  */
 #Function Loop.add_socket co_loop_add_socket: N{_} @ Socket{new_sock} X{context;NULL;Obj*}
 
 /**
  * @brief removes a socket from the event loop
  * @param old_sock the socket to be removed
- * @param context a co_obj_t context pointer (currently unused)
  */
 #Function Loop.remove_socket co_loop_remove_socket: N{_} @ Socket{old_sock} X{context;NULL;Obj*}
 
 /**
  * @brief gets a socket that is registered with the event loop
  * @param uri a URI to match against the available sockets
- * @param context a co_obj_t context pointer (currently unused)
  */
 #Function Loop.get_socket co_loop_remove_socket: Socket{_} @ S{uri} X{context;NULL;Obj*}
 co_obj_t *co_loop_get_socket(char *uri, co_obj_t *context);
@@ -800,14 +846,12 @@ co_obj_t *co_loop_get_socket(char *uri, co_obj_t *context);
 /**
  * @brief schedules a new timer with the event loop
  * @param timer the timer to schedule
- * @param context a co_obj_t context pointer (currently unused)
  */
 #Function Timer.add co_loop_add_timer: N{_} @ Timer{new_timer} X{context;NULL;Obj*}
 
 /**
  * @brief removes a timer from the event loop
  * @param old_timer the timer to remove from list
- * @param context a co_obj_t context pointer (currently unused)
  */
 #Function Timer.remove co_loop_remove_timer: N{_} @ Timer{old_timer} X{context;NULL;Obj*}
 
@@ -815,27 +859,25 @@ co_obj_t *co_loop_get_socket(char *uri, co_obj_t *context);
  * @brief sets timer to expire in msecs from now
  * @param timer the timer to set
  * @param msecs number of milliseconds
- * @param context a co_obj_t context pointer (currently unused)
  */
 #Function Timer.set co_loop_set_timer: N{_} @ Timer{timer} N{msecs;long} X{context;NULL;Obj*}
 
-/**
- * @brief gets a socket that is registered with the event loop
- * @param ptr void pointer to match against the available timers
- * @param context a co_obj_t context pointer (currently unused)
+/** @constructor Timer.get(name)
+ * @brief gets a timer that is registered with the event loop
+ * @param name name to be matched against the available timers 
  */
-// #Function Timer.get co_loop_get_timer: N{_} @ Timer{ptr} N{msecs;long} X{context;NULL;Obj*}
-// co_obj_t *co_loop_get_timer(void *ptr, co_obj_t *context);
+#Function Timer.get co_loop_get_timer: Timer{_} @ S{name} X{context;NULL;Obj*} X{ptr;(void*)name;void*}
 
-/**
- * @brief malloc and initialize a timer
- * @param size timer struct size
- * @param proto timer protocol
+/** @constructor Timer.create(name, tv,callback)
+ * @brief create a timer
+ * @param name name of the timer (used later for Timer.get, save the value in a global so that it is constant)
+ * @param tv the timeval (a float that will be converted into it)
+ * @param callback the function to be called at expirartion
  */
 LqwCbKeyPtr(TimerCB);
 #CallBack TimerCb{self} co_cb_t 0: Obj{if(output) *output} N{_} @ Timer{self} List{params}
 #Function Timer.create co_timer_create:  Timer{_} @ \
-   N{tv;luaNumber} TimerCb{timer_cb} S{name} \
+   S{name} N{tv;luaNumber} TimerCb{timer_cb} \
    X{ptr;(void*)lqwPermStr(name);void*}    X{sec;(long)floor(tv);long} \
    X{deadline;??<sec,(long)floor((tv-(double)sec)*1000000.00)??>;struct timeval} 
            
@@ -851,16 +893,22 @@ LQW_MODE int Timer__tostring(lua_State* L) {
 /****************************************************************/
 /*! @class Process
  */
-#if 0
-/* Process callbacks */
-DefSelfCb_N(Process,init,name);
-DefSelfCb_N(Process,destroy,name);
-DefSelfCb_N(Process,stop,name);
-DefSelfCb_N(Process,restart,name);
-    
-static int proc_start(co_obj_t *self, char *argv[]) {
+typedef int (*process_idsr_cb)(co_obj_t *self);
+LqwCbKeyPtr(ProcInitCB)
+LqwCbKeyPtr(ProcDestroyCB)
+LqwCbKeyPtr(ProcStopCB)
+LqwCbKeyPtr(ProcRestartCB)
+#CallBack ProcInitCB{self} process_idsr_cb: N{_} @ Process{self}
+#CallBack ProcDestroyCB{self} process_idsr_cb: N{_} @ Process{self}
+#CallBack ProcStopCB{self} process_idsr_cb: N{_} @ Process{self}
+#CallBack ProcRestartCB{self} process_idsr_cb: N{_} @ Process{self}
+
+LqwCbKeyPtr(ProcStartCB)
+#OwnCallBack ProcStartCB process_start_cb
+static int process_start(co_obj_t *self, char *argv[]) {
     int i = 0;
     
+    lqw_getCb(L,cbKeyProcCB((void*)(%{key_name})));
     getReg(SelfCbKey("Process","start",(Process*)->name));
     lua_settop(L1);
     pushProcess(L,self);
@@ -875,8 +923,9 @@ static int proc_start(co_obj_t *self, char *argv[]) {
     if(lua_pcall(L2,1)) {
         //2do: error
         return 0;
-    } else 
+    } else {
         return toN(L,-1,int);
+    }
 }
 
 /** @constructor process.create(name, pid_file, exec_path, run_path, prof)  
@@ -884,7 +933,7 @@ static int proc_start(co_obj_t *self, char *argv[]) {
   * all callbacks are passed the process object and return an integer (0 on success, else is fail)
   * start callback takes also a table of strings as second argument 
   */
-#OwnFunction Process.start
+#OwnFunction Process.create Process_create
 LQW_MODE int Process_create(lua_State* L) {
     co_process_t proto = {
         {  CO_FLAG_LUAGC,NULL,NULL,0,_ext8 },
@@ -896,20 +945,18 @@ LQW_MODE int Process_create(lua_State* L) {
     static const char* fn_names[] = {"init","destroy","start","stop","restart",NULL};
     co_process_t* p;
 
-    proto.name = checkS(L1);
-    proto.pid_file = checkS(L2);
-    proto.exec_path = checkS(L3);
-    proto.run_path = checkS(L4);
+    proto.name = checkS(L,1);
+    proto.pid_file = checkS(L,2);
+    proto.exec_path = checkS(L,3);
+    proto.run_path = checkS(L,4);
     checkCbs(L,5,"Process",name,fn_names);
     
     p = co_process_create(sizeof(lua_process), proto, proto.name, proto.pid_file, proto.exec_path, proto.run_path);
     
-    if (p) 
-        pushProcess(L,p);
-    else
-        lua_pushnil(L);
+    if (p) pushProcess(L,p);
+    else lua_pushnil(L);
     
-    R1;
+    return 1;
 }
 
 /** @method process.start(argv)
@@ -968,6 +1015,7 @@ Method Socket_remove(lua_State*L) {
     pushN(r);
     R1;
 }
+
 
 /** @constructror Socket.get(uri)
   */
@@ -1132,15 +1180,6 @@ static const luaL_Reg UnixSocket_metamethods[] = {
 //2do tree.h
 //2do util.h
 
-// id.h
-/** @fn  Sys.node_id_get()
- * @brief Returns nodeid
- */
-Function NodeId_get(lua_State* L) {
-    nodeid_t id = co_id_get(void);
-    pushN(L,id.id);
-    R1;
-}
 
 // plugin.h
 /** @fn Sys.plugin_load()
@@ -1152,9 +1191,11 @@ Function Plugin_load(lua_State* L) {
     R1;
 }
 
+LqwRealoc2lua_Alloc(colua_alloc,h_realloc,h_free);
+    
 static void init_globals(lua_State* L) {
     nil_obj = co_nil_create(0);
-    gL = L;
+    lqwInit(colua_alloc,NULL);
 }
 
 #endif

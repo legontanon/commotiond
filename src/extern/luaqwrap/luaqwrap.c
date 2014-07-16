@@ -37,7 +37,9 @@ LQW_MODE int luaL_optboolean(lua_State* L, int n, int def) {
 }
 #endif
 
+
 LQW_MODE lua_State* gL = NULL;
+LQW_MODE lua_CFunction lqw_Fmt = NULL;
 
 LQW_MODE int lqwCleanup(void) {
     /* cleanup lua */
@@ -134,3 +136,8 @@ LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, lu
     lua_pop (L,1);
     return 1;
 }
+
+LQW_MODE void lqwInit(alloc,alloc_data) {
+    gL = lua_newstate(alloc,alloc_data);
+}
+

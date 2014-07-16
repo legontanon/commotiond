@@ -645,6 +645,7 @@ do
         local a = {}
         log(3,'Alias:',a)
     end
+   
     
     function lqw_cmd.Accessor(params,val,frame)
         if not module_name then E("no module defined") end        
@@ -663,6 +664,7 @@ do
         log(5,'Finish:',params,val)
         local fname = params:M("^%s*([%g_]+)%s*$") or E("Not a valid registration function name");
         local s = registration2C(fname);
+
         frame.add(s);
     end
     
@@ -739,8 +741,6 @@ do
         
         test = (ret and args) or E("malformed method:" .. v2s(m.fn_name) )
         
-        D(ret)
-        D(args)
         splitList(ret,ret_t_pars,m.rets)
         splitList(args,arg_t_opts,m.args)
         

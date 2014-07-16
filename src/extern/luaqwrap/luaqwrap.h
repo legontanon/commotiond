@@ -234,6 +234,7 @@ LQW_MODE int lqwCleanup(void);
 
 LQW_MODE int lqwNop(lua_State* L); // do nothing
 
+
 /*
  * RegisterFunction(name)
  * registration code for "bare" functions in global namespace
@@ -266,5 +267,15 @@ LQW_MODE int lqwNop(lua_State* L); // do nothing
 #define setGlobalS(L,n,v) { pushS(L,v); lua_setglobal(L,n); }
 #define setGlobalN(L,n,v) { pushN(L,v); lua_setglobal(L,n); }
 #define setGlobalO(C,L,n,v) { push##C(L,v); lua_setglobal(L,n); }
+
+#define LqwRealoc2lua_Alloc(N,Realloc,Free) \
+static void* N (void *ud, void *ptr, size_t osize, size_t nsize) \
+   { if (nsize) return Realloc(ptr, nsize); else {Free(ptr); return NULL;} }
+
+
+
+
+
+
 
 #endif

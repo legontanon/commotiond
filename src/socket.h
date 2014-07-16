@@ -62,6 +62,19 @@ co_obj_t *co_fd_create(co_obj_t *parent, int fd);
 /**
  * @struct co_socket_t contains file path and state information for socket
  */
+
+typedef int (*co_socket_init_cb_t)(co_obj_t *self);
+typedef int (*co_socket_destroy_cb_t)(co_obj_t *self);
+typedef int (*co_socket_hangup_cb_t)(co_obj_t *self, co_obj_t *context);
+typedef int (*co_socket_bind_cb_t)(co_obj_t *self, const char *endpoint);
+typedef int (*co_socket_connect_cb_t)(co_obj_t *self, const char *endpoint);
+typedef int (*co_socket_send_cb_t)(co_obj_t *self, char *outgoing, size_t length);
+typedef int (*co_socket_receive_cb_t)(co_obj_t *self, co_obj_t *fd, char *incoming, size_t length);
+typedef int (*co_socket_setopt_cb_t)(co_obj_t *self, int level, int option, void *optval, socklen_t optvallen);
+typedef int (*co_socket_getopt_cb_t)(co_obj_t *self, int level, int option, void *optval, socklen_t optvallen);
+typedef int (*co_socket_poll_cb_t)(co_obj_t *self, co_obj_t *context);
+typedef int (*co_socket_register_cb_t)(co_obj_t *self, co_obj_t *context);
+
 struct co_socket_t {
   co_obj_t _header;
   uint8_t _exttype;
@@ -73,17 +86,17 @@ struct co_socket_t {
   struct sockaddr* local;
   struct sockaddr* remote;
   bool listen;
-  int (*init)(co_obj_t *self);
-  int (*destroy)(co_obj_t *self);
-  int (*hangup)(co_obj_t *self, co_obj_t *context);
-  int (*bind)(co_obj_t *self, const char *endpoint);
-  int (*connect)(co_obj_t *self, const char *endpoint);
-  int (*send)(co_obj_t *self, char *outgoing, size_t length);
-  int (*receive)(co_obj_t *self, co_obj_t *fd, char *incoming, size_t length);
-  int (*setopt)(co_obj_t *self, int level, int option, void *optval, socklen_t optvallen);
-  int (*getopt)(co_obj_t *self, int level, int option, void *optval, socklen_t optvallen);
-  int (*poll_cb)(co_obj_t *self, co_obj_t *context);
-  int (*register_cb)(co_obj_t *self, co_obj_t *context);
+  co_socket_init_cb_t init;
+  co_socket_destroy_cb_t destroy;
+  co_socket_hangup_cb_t hangup;
+  co_socket_bind_cb_t bind;
+  co_socket_connect_cb_t connect;
+  co_socket_send_cb_t send;
+  co_socket_receive_cb_t receive;
+  co_socket_setopt_cb_t setopt;
+  co_socket_getopt_cb_t getopt;
+  co_socket_poll_cb_t poll_cb;
+  co_socket_register_cb_t register_cb;
   unsigned int events;
 } __attribute__((packed));
 

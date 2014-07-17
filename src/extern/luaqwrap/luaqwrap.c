@@ -41,10 +41,12 @@ LQW_MODE int luaL_optboolean(lua_State* L, int n, int def) {
 LQW_MODE lua_State* gL = NULL;
 LQW_MODE lua_CFunction lqw_Fmt = NULL;
 
+
+
 LQW_MODE int lqwCleanup(void) {
     /* cleanup lua */
-    lua_close(L);
-    L = NULL;
+    lua_close(gL);
+    gL = NULL;
     return 0;
 }
 
@@ -95,6 +97,28 @@ LQW_MODE const gchar* lua_shiftstring(lua_State* L, int i) {
     }
 }
 
+LQW_MODE void lqw_getCb(lua_State* L, const char* cbk) {
+    getReg(cbk);
+    checkF(L,-1);
+}
+
+LQW_MODE void lqw_setCb(lua_State* L, int idx, const char* cbk) {
+    checkF(L,-1);
+    setReg(L,cbk);
+}
+
+LQW_MODE void lwqCheckCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[]) {
+    checkT(L,idx);
+    for(lua_pushnil(L);lua_next(L,idx) && *cbKeys;lua_pop(L,1)) checkF(L,-1);
+    lua_pop(L,1);
+}
+
+LQW_MODE void lwqSetCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[], void* self) {
+    checkT(L,idx);
+    for(lua_pushnil(L);lua_next(L,idx) && *cbKeys;)
+        lqw_setCb(L,-1,(*(cbKeys++))(self));
+    lua_pop(L,1);
+}
 
 /* following is based on the luaL_setfuncs() from Lua 5.2, so we can use it in pre-5.2 */
 static void lqwSetFuncs(lua_State *L, const luaL_Reg *l, int nup) {

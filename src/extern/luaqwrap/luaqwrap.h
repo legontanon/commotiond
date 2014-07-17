@@ -164,7 +164,7 @@ LQW_MODE C shift##C(DLI) { \
 } \
 LQW_MODE int dump#C(lua_State* L) { pushS(L,#C); R1; } \
 LQW_MODE C* opt#C(DLI,dflt) { retrun ( (lua_gettop(L)<idx || isNil(LI)) ? dflt : check##C(LI) )); R0;}}\
-LQW_MODE int C##__gc (luaState* L) { C#__gcoll(to##C(L,1)); return 0; } \
+LQW_MODE int C##___gc (luaState* L) { C#__gcoll(to##C(L,1)); return 0; } \
 _End(C,ClassDefine)
 
 
@@ -192,10 +192,10 @@ LQW_MODE int C##__gc (luaState* L)
  * of a callback based on a datum passed to the callback
  */
 typedef const char* (*lqwCbKey)(void* ptr);
-#define LqwCbKeyPtr(CB) LQW_MODE const char* CB##_key(void* p) { return lqwFmt(#CB ":%p",p); }
-#define LqwCbKeyStr(CB) LQW_MODE const char* CB##_key(void* p) { return lqwFmt(#CB ":%s",(const char*)p); }
-
-
+#define LqwCbKeyPtr(CB) LQW_MODE const char* cbKey##CB(void* p) { return lqwFmt(#CB ":%p",p); }
+#define LqwCbKeyStr(CB) LQW_MODE const char* cbKey##CB(void* p) { return lqwFmt(#CB ":%s",(const char*)p); }
+#define LqwCbKeyStrElem(CB,C,E) LQW_MODE const char* cbKey##CB(void* p) { return lqwFmt(#CB ":%s",((C*)p)->E); }
+#define LqwCbKeyPtrElem(CB,C,E) LQW_MODE const char* cbKey##CB(void* p) { return lqwFmt(#CB ":%p",((C*)p)->E); }
 
 /****************************************************************/
 

@@ -348,61 +348,70 @@ void Obj__gcoll(Obj* o) {
 
 
 
-#Function Str32.create co_str32_create: Str32{_} @ L{input;input_size} X{flags;COLUA_FLAGS;uint8_t}
-#Accessor Str32.__tostring RO: L{$data;$_len}
-#Accessor Str32.__length RO: N{$_len}
-#Function Str32.__concat co_str_cat: Str32{dst} @ Str32{in} Str32{src2} X{dst;co_str_copy(in);Str32*}
-#Function Str32.__eq co_str_cmp: B{(_!=0)} @ Str32{a} Str32{b}
-#Function Str32.__lt co_str_cmp: B{(_<0)} @ Str32{a} Str32{b}
-#Function Str32.__le co_str_cmp: B{(_<=0)} @ Str32{a} Str32{b}
+#Function Str.create co_str32_create: Str32{_} @ L{input;input_size} X{flags;COLUA_OWNFLAG;uint8_t}
+#Accessor Str.__tostring RO: L{$data;$_len}
+#Accessor Str.__len RO: N{$_len}
+#Function Str.__concat co_str_cat: Str32{dst} N{_} @ Str32{a} Str32{src} X{dst;co_str_copy(a);Str32*} X{size;65536;size_t}
+#Function Str.__eq co_str_cmp: B{(_!=0)} @ Str32{a} Str32{b}
+#Function Str.__lt co_str_cmp: B{(_<0)} @ Str32{a} Str32{b}
+#Function Str.__le co_str_cmp: B{(_<=0)} @ Str32{a} Str32{b}
 void (*Str32__gcoll)(Str32*) = Obj__gcoll;
 
 
-static int intThru(int out);
-static int intThru(int out) { return out; } // help, optimizer, help!
 
-static const char* strThru(const char* s);
+static int intThru(int out); // lqw needs it
+static int intThru(int out) { return out; }
+
+static const char* strThru(const char* out); // lqw needs it
 static const char* strThru(const char* out) { return out;}
 
-co_obj_t *co_uint64_create(const uint64_t input, const uint8_t flags);
-static Uint64* u64(uint64_t in);
 
-static Uint64* (uint64_t in){ return co_uint64_create(in, COLUA_OWNFLAG); }
 
-#Function Uint64.new_str co_uint64_create: Uint64{_} @ S{in}  X{input;(uint64_t)strtoull(in,NULL,10);uint64_t}
-#Function Uint64.new_num co_uint64_create: Uint64{_} @ N{in}  X{input;(uint64_t)floor(in);uint64_t}
+#define u64 co_uint64_create /* cheat for size */
+co_obj_t *u64(const uint64_t input, const uint8_t flags);
 
-#Function Uint64.__add u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data+b->data;uint64_t}
-#Function Uint64.__sub u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data-b->data;uint64_t}
-#Function Uint64.__mul u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data*b->data;uint64_t}
-#Function Uint64.__div u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data/b->data;uint64_t}
-#Function Uint64.__mod u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data%b->data;uint64_t}
-#Function Uint64.__len intThru: N{_} @ Uint64{a} X{in;floor( log2(a->data) + 1 );int}
+#Function Uint64.new_str u64: \
+    Uint64{_} @ S{in} X{input;(uint64_t)strtoull(in,NULL,10);uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint64.new_num u64: Uint64{_} @ N{in} X{input;(uint64_t)floor(in);uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+
+#Function Uint64.__add u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data+b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint64.__sub u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data-b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint64.__mul u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data*b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint64.__div u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data/b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint64.__mod u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data%b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+
 #Function Uint64.__eq intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data==b->data;int}
-#Function Uint64.__lt intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data==b->data;int}
-#Function Uint64.__le intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data==b->data;int}
+#Function Uint64.__lt intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data< b->data;int}
+#Function Uint64.__le intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data<=b->data;int}
+
+#Function Uint64.__len intThru: N{_} @ Uint64{a} X{in;floor( log2(a->data) + 1 );int}
 #Function Uint64.__tostring strThru: S{_} @ Uint64{a} X{out;lwcFmt("%ull",a->data);const char*}
+
 void (*Uint64__gcoll)(Uint64*) = Obj__gcoll;
 
 
-co_obj_t *co_int64_create(const int64_t input, const int8_t flags);
-static    Int64* i64(int64_t out);
-static    Int64* (int64_t out){ return co_int64_create(out, COLUA_OWNFLAG); }
-#Function Int64.new_str co_int64_create:            Int64{_}       @ S{in}  X{input;(int64_t)strtoll(in,NULL,10);int64_t}
-#Function Int64.new_num co_int64_create:            Int64{_}       @ N{in}  X{input;(int64_t)floor(in);int64_t}
-#Function Int64.__add i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data+b->data;uint64_t}
-#Function Int64.__sub i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data-b->data;uint64_t}
-#Function Int64.__mul i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data*b->data;uint64_t}
-#Function Int64.__div i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data/b->data;uint64_t}
-#Function Int64.__mod i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data%b->data;uint64_t}
-#Function Int64.__unm i64:               Int64{_} @ Int64{a}          X{out;-(a->data);uint64_t}
-#Function Int64.__eq boolOP: B{_}     @  Int64{a}   Int64{b}          X{out;a->data==b->data;int}
-#Function Int64.__lt boolOP: B{_}     @  Int64{a}   Int64{b}          X{out;a->data==b->data;int}
-#Function Int64.__le boolOP: B{_}     @  Int64{a}   Int64{b}          X{out;a->data==b->data;int}
-#Function Int64.__len intThru: N{_}   @  Int64{a}                     X{out;floor( log2(a->data) + 1 );int}
-void    (*Int64__gcoll)                 (Int64*)                      = Obj__gcoll;
-#Function Int64.__tostring strThru: \
-S{_} @    Int64{a}                                                   X{out;lwcFmt("%dll",a->data);const char*}
+
+#define i64 co_int64_create /* cheat for size */
+co_obj_t *i64(const int64_t input, const uint8_t flags);
+
+#Function Int64.new_str i64:Int64{_} @ S{in} X{input;(uint64_t)strtoull(in,NULL,10);int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int64.new_num i64:Int64{_} @ N{in} X{input;(uint64_t)floor(in);int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+
+#Function Int64.__add i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data+b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int64.__sub i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data-b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int64.__mul i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data*b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int64.__div i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data/b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int64.__mod i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data%b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+
+#Function Int64.__eq intThru: B{_} @ Int64{a} Int64{b} X{in;a->data==b->data;int}
+#Function Int64.__lt intThru: B{_} @ Int64{a} Int64{b} X{in;a->data< b->data;int}
+#Function Int64.__le intThru: B{_} @ Int64{a} Int64{b} X{in;a->data<=b->data;int}
+
+#Function Int64.__len intThru: N{_} @ Int64{a} X{in;floor( log2(a->data) + 1 );int}
+#Function Int64.__tostring strThru: S{_} @ Int64{a} X{out;lwcFmt("%ull",a->data);const char*}
+
+void (*Int64__gcoll)(Int64*) = Obj__gcoll;
+
 
 
 
@@ -507,11 +516,9 @@ void co_id_set_from_mac(const unsigned char *mac, int mac_size);
 
 /** @fn Cmd.new(name)
  */
-#Function Cmd.new(name) co_str8_create: CmdKey{_} @ L{input;input_size}
+#Function CmdKey.new(name) co_str8_create: CmdKey{_} @ L{input;input_size}
 
-LQW_MODE const char* cbKeyCmdCB(void* ptr) {
-    return lqwFmt("CmdCB:%s",((co_str8_t*)ptr)->data);
-}
+LqwCbKeyStrElem(ProcRestartCB,CmdKey,data)
 #CallBack CmdCB{self} co_cb_t 0: Obj{if(output) *output} N{_} @ Cmd{self} List{params}
 
 /** @fn Cmd.register(key,usage,desc,handler)
@@ -521,7 +528,7 @@ LQW_MODE const char* cbKeyCmdCB(void* ptr) {
  * @param desc the description of command
  * @param handler the callback that handles the command
  */
-#Function Cmd.register co_cmd_register: \
+#Function CmdKey.register co_cmd_register: \
     N{_} @ CmdKey{k} L{usage,ulen} L{desc,dlen} CmdCB{handler,name} X{name;k->data;const char*} X{nlen;k->_len;size_t}
 
 /** @fn CmdKey.exec
@@ -529,19 +536,19 @@ LQW_MODE const char* cbKeyCmdCB(void* ptr) {
  * @param key the name of the command
  * @param output return object of command
  */
-#Function Cmd.exec co_cmd_exec: Obj{out} N{_} @ CmdKey{key} Obj{param} X{output;&out;Obj**}
+#Function CmdKey.exec co_cmd_exec: Obj{out} N{_} @ CmdKey{key} Obj{param} X{output;&out;Obj**}
 
 /**
  * @brief returns command usage format
  * @param key command key
  */
-#Function Cmd.usage co_cmd_usage: Obj{out} @ CmdKey{key}
+#Function CmdKey.usage co_cmd_usage: Obj{out} @ CmdKey{key}
 
 /** @fn CmdKey.desc(key)
  * @brief returns command description (what the command does)
  * @param key the name of the command
  */
-#Function Cmd.desc co_cmd_desc: Obj{out} @ CmdKey{key}
+#Function CmdKey.desc co_cmd_desc: Obj{out} @ CmdKey{key}
 
 /**@fn Cmd.hook(key,cb)
  * @brief hooks callback function into a command
@@ -555,10 +562,10 @@ LQW_MODE const char* cbKeyCmdCB(void* ptr) {
  * @param iter iterator function reference
  * @param context other parameters passed to iterator
  */
-#CallBack CmdIter co_iter_t NULL: Obj{_} @ Cmd{current}
+#CallBack CmdIter co_iter_t NULL: Obj{_} @ CmdKey{current}
 #Function Cmd.process co_cmd_process: N{_} @ CmdIter{iter} X{context;NULL;void*}
 
-#Function Cmd.__gc co_obj_free: @ CmdKey{key}
+void (*CmdKey__gc)(CmdKey*) =  co_obj_free;
 
 
 
@@ -706,7 +713,7 @@ co_obj_t * co_list_foreach(co_obj_t *list, void** state);
  * @param iter iterator taking the current interface and returning nothing
  */
 #Callback IfaceIter co_iface_iter_t: @ Iface{iface} 
-#Function Iface.foreach  co_ifaces_foreach: @ IfaceIter{iter} X{ctx;NULL}
+#Function Iface.foreach co_ifaces_foreach: @ IfaceIter{iter} X{ctx;NULL}
 
 
 
@@ -719,11 +726,11 @@ co_obj_t * co_list_foreach(co_obj_t *list, void** state);
 /** @fn Iface.add(iface_name,family)
  * @brief adds a new interface to the list of interfaces, checks if it is IPv4 and IPv6 capable, and or wireless
  * @param iface_name name of the interface
- * @param family address family of the interface. Must be AF_INET (IPv4) or AF_INET6 (IPv6), which uses host and port number for addressing
+ * @param family address family of the interface. either AF_INET (IPv4) or AF_INET6 (IPv6), which uses host and port number for addressing
  */
 #Value Iface.AF_INET AF_INET  
 #Value Iface.AF_INET6 AF_INET6
-#Function Iface.add co_iface_add: Iface{_} @ S{iface_name} N{family;int}
+#Function Iface.add co_iface_add: Iface{_} @ S{iface_name} N{family;int;AF_INET}
 
 /** @fn Iface.wpa_connect(iface)
  * @brief connects the commotion interface to wpa supplicant
@@ -1413,11 +1420,198 @@ Function Tree.__tostring co_tree_raw: L{output;_;256000} N{_} @ Tree{tree} X{ole
 
 
 
+
 /** @fn Node.plugins_load(dir_path)
  * @brief loads all plugins in specified path
  * @param dir_path directory to load plugins from
  */
 #Function Node.plugins_load co_plugins_load: N{_} @ S{dir_path}
+
+
+
+typedef int (*co_cb_t)(co_obj_t *self, co_obj_t **output, co_obj_t *params);
+
+
+#CallBack SchemaCB{self} co_cb_t: Obj{out} @ Schema{self} Obj{params} X{output;&out;Obj**}
+
+/**
+ * @brief register a callback for populating a profile schema
+ * @param cb schema callback
+ */
+#Function Schema.register co_schema_register: N{_} @ SchemaCB{cb}
+
+/**
+ * @brief register a callback for populating global profile
+ * @param cb schema callback
+ */
+#Function Schema.register_global co_schema_register_global: N{_} @ SchemaCB{cb}
+
+/**
+ * @brief load schemas for specified profile
+ * @param profile profile to load schemas for
+ */
+#Function Profile.schemas_load co_schemas_load: N{_} @ Profile{profile}
+
+/**
+ * @brief create global profiles list
+ * @param index_size size of index for profiles list (16 or 32 bits)
+ */
+#Function Node.profiles_create co_profiles_create: N{_} @ N{index_size;size_t}
+
+/**
+ * @brief creates a list of available profiles
+ */
+#Function Node.profiles_init co_profiles_init: N{_} @ N{index_size;size_t}
+
+/**
+ * @brief removes the list of available profiles
+ */
+#Function Node.profiles_shutdown co_profiles_shutdown: @ 
+
+/**
+ * @brief imports available profiles from profiles directory
+ * @param path file path to the profiles directory
+ */
+#Function Profile.import_files co_profile_import_files: N{_} @ S{path}
+
+/**
+ * @brief imports global profile
+ * @param path file path to the global profile
+ */
+#Function Profile.import_global co_profile_import_global: N{_} @ S{path}
+
+
+/**
+ * @brief searches the profile list for a specified profile
+ * @param name profile name (search key)
+ */
+#Function Profile.find co_profile_find: Profile{_} @ S{name}
+
+/**
+ * @brief returns the global profile
+ */
+#Function Profile.global co_profile_global: Profile{_} @
+
+/**
+ * @brief deletes the global profile
+ */
+#Function Profile.delete_global co_profile_global: Profile{_} @
+
+/**
+ * @brief adds a new profile
+ * @param name profile name
+ * @param nlen length of profile name
+ */
+#Function Profile.add co_profile_global: N{_} @ L{name;nlen}
+
+/**
+ * @brief removes profile with given name
+ * @param name profile name
+ * @param nlen length of profile name
+ */
+#Function Profile.remove co_profile_remove: N{_} @ L{name;nlen}
+
+/**
+ * @brief dumps profile data 
+ * @param profile profile struct
+ */
+#Function Profile.dump co_profile_dump: @ Profile{profile}
+
+/**
+ * @brief returns the key value (if an int) from the profile. If no value set, returns the default value
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ */
+#Function Profile.dump co_profile_dump: Obj{_} @ Profile{profile} Str{key}
+
+/**
+ * @brief sets a specified profile value (if a string)
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ * @param value key's value
+ * @param vlen value length
+ */
+#Function Profile.set_str co_profile_set_str: N{_} @ Profile{profile} Str{key} L{value;vlen}
+
+/**
+ * @brief returns the key value (if a string) from the profile. If no value set, returns the default value
+ * @param profile profile struct
+ * @param output output buffer
+ * @param key key in profile
+ * @param klen key length
+ */
+#Function Profile.get_str co_profile_get_str: S{out} N{_} @ Profile{profile} L{key;klen} X{output;&out;char*}
+
+/**
+ * @brief sets a specified profile value (if an int)
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ * @param value key's value
+ */
+#Function Profile.set_int co_profile_set_str: S{out} N{_} @ Profile{profile} L{key;klen} N{value;long}
+
+/**
+ * @brief returns the key value (if an int) from the profile. If no value set, returns the default value
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ */
+#Function Profile.get_int co_profile_get_int: N{_} @ Profile{profile} L{key;klen}
+
+/**
+ * @brief sets a specified profile value (if an unsigned int)
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ * @param value key's value
+ */
+#Function Profile.set_uint co_profile_set_uint: N{_} @ Profile{profile} L{key;klen} N{value;unsigned long}
+
+/**
+ * @brief returns the key value (if an unsigned int) from the profile. If no value set, returns the default value
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ */
+#Function Profile.get_uint co_profile_get_uint: N{_} @ Profile{profile} L{key;klen}
+
+/**
+ * @brief sets a specified profile value (if a float)
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ * @param value key's value
+ */
+#Function Profile.set_float co_profile_set_float: N{_} @ Profile{profile} L{key;klen} N{value;double}
+
+/**
+ * @brief returns the key value (if a float) from the profile. If no value set, returns the default value
+ * @param profile profile struct
+ * @param key key in profile
+ * @param klen key length
+ */
+#Function Profile.get_float co_profile_get_float: N{_} @ Profile{profile} L{key;klen}
+
+/**
+ * @brief exports a profile in memory to a file
+ * @param profile profile struct
+ * @param path export path
+ */
+#Function Profile.export_file co_profile_export_file: N{_} @ Profile{profile} S{path}
+
+/**
+ * @brief processes all loaded profiles with specified iterator function
+ * @param iter iterator function callback
+ * @param context additional parameters for iterator
+ */
+#Function Profile.process co_profiles_process: Obj{_} @ Profile{profile} ListIter{iter} X{context;NULL;void*}
+
+
+
+
 
 LqwRealoc2lua_Alloc(colua_alloc,h_realloc,h_free);
     

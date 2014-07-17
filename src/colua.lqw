@@ -88,8 +88,14 @@ tyepdef struct dummy {int i;} dummy_t;
 #Class USocket co_socket_t
 #Class Fd co_fd_t
 
+#Class Tree co_tree32_t
+
 #OwnClass Node dummy_t
 #OwnClass Debug dummy_t
+
+#Class Str32 co_str32_t
+#Class Uint64 co_uint64_t
+#Class Int64 co_int64_t
 
 #OwnClass Obj co_obj_t
 
@@ -131,30 +137,52 @@ static co_obj_t* toObj(lua_State* L, int idx) {
     co_obj_t* o = NULL;
 
     switch(lua_type(L,idx)) {
-        case LUA_TNUMBER:
-            return co_float64_create(lua_tonumber(L,idx),CO_FLAG_LUAGC);
+        case LUA_TNUMBER: {
+            luaNumber n = lua_tonumber(L,idx);
+            WARN("Number arbitrarily converted to float64 %f",n);
+            return co_float64_create(n,COLUA_OWNFLAGS);
+        }
         case LUA_TBOOLEAN:
-            return co_bool_create(lua_toboolean(L,idx),CO_FLAG_LUAGC);
+            return co_bool_create(lua_toboolean(L,idx),COLUA_OWNFLAGS);
         case LUA_TSTRING: {
-                size_t len=0;
-                const char * s = lua_tolstring(L, idx, &len);
-                return co_str32_create(s,len,CO_FLAG_LUAGC);
-                break;
-            } 
+            size_t len=0;
+            const char * s = toL(L, idx, &len);
+            return co_str32_create(s,len,COLUA_OWNFLAGS);
+        } 
         case LUA_TUSERDATA:
-            return lua_touserdata(L,idx);
-        case LUA_TTABLE:
-            /* 2do: table2obj() */
-        default:
-            Warn("Unimplemented");
+            return (co_obj_t*) lua_touserdata(L,idx);
+        case LUA_TTABLE: {
+            Tree* tree  = co_tree32_create();
+            for(lua_pushnil(L);lua_next(L,idx);lua_pop(L,1)) {
+                size_t ks = 0;
+                const char* k = toL(L,-2,&ks);
+                Obj* o = toObj(L,-1);
+                if (o) {
+                    if (co_tree_insert(tree,k,ks,o) == 0) {
+                        WARN("toObj: failure inserting table element '%s'",k);
+                        //2do handle err   
+                    }
+                } else {
+                    WARN("toObj: table element '%s' cannot be converted to object",k);
+                    //2do handle err    
+                }
+            }
+            lua_pop(L,1);
+            
+            return tree;
+        }
+        case LUA_TNIL:
+            o = co_nil_create(CO_FLAG_LUAGC);
+            break;
         case LUA_TFUNCTION:
         case LUA_TTHREAD:
         case LUA_TLIGHTUSERDATA:    
             Warn("Invalid conversion");
-        case LUA_TNIL:
-            o = co_nil_create(CO_FLAG_LUAGC);
-            break;
-    }           
+            return NULL;
+        default:
+            Warn("Invalid Lua Type");
+            return NULL;
+    }
     return o;
 }
 
@@ -280,25 +308,27 @@ static int pushObj(lua_State* L, co_obj_t* o) {
             pushTree(L,o);
             R1;
         
+        case _int64: push Int64(L,o);
+        case _uint64: push Uint64(L,o);        
+
         case _ext8:
-        case _ext16:
-        case _ext32:
             switch( ((co_ext8_t)o)->_exttype) {
                 case _cmd: pushCmd(L,o); R1;
                 case _iface: pushIface(L,o); R1;                    
-                case _plug:  pushPlug(L,o); R1;
                 case _profile: pushProfile(L,o); R1;
-                case _cbptr:  pushCallBack(L,o); R1;
                 case _fd:  pushFd(L,o); R1;
                 case _sock: pushSock(L,o); R1;
                 case _co_timer: pushTimer(L,o); R1;
                 case _process: pushProcess(L,o); R1;
-                case _ptr: return 0;
-                default: goto error;
+                case _cbptr:
+                case _plug:
+                case _ptr:
+                default:
+                    goto error;
             }
         
-        case _int64:
-        case _uint64:        
+        case _ext16:
+        case _ext32:
         case _fixext1:
         case fixext2:
         case _fixext4:
@@ -307,23 +337,76 @@ static int pushObj(lua_State* L, co_obj_t* o) {
         default:
         goto error;
     }
+    WARN("Unsupported type (%d)", o->type );
     error:
-        lua_pushnil(L);
-        R1;
+        R0;
+}
+
+void Obj__gcoll(Obj* o) {
+    if ( o->flags & COLUA_OWNFLAG ) co_obj_free(o);
 }
 
 
 
+#Function Str32.create co_str32_create: Str32{_} @ L{input;input_size} X{flags;COLUA_FLAGS;uint8_t}
+#Accessor Str32.__tostring RO: L{$data;$_len}
+#Accessor Str32.__length RO: N{$_len}
+#Function Str32.__concat co_str_cat: Str32{dst} @ Str32{in} Str32{src2} X{dst;co_str_copy(in);Str32*}
+#Function Str32.__eq co_str_cmp: B{(_!=0)} @ Str32{a} Str32{b}
+#Function Str32.__lt co_str_cmp: B{(_<0)} @ Str32{a} Str32{b}
+#Function Str32.__le co_str_cmp: B{(_<=0)} @ Str32{a} Str32{b}
+void (*Str32__gcoll)(Str32*) = Obj__gcoll;
 
-#Class Str8 co_str8_t
-co_obj_t *co_str8_create(const char *input, const size_t input_size, const uint8_t flags);
-#Function Str8.create co_str8_create: Str8{_} @ L{input;input_size} X{flags;COLUA_FLAGS}
-#Accessor Str8.__tostring RO: L{$data;$_len}
-void Str8__gcoll(void* p) {
-    co_obj_free((Obj*)p);
-}
 
-/**
+static int intThru(int out);
+static int intThru(int out) { return out; } // help, optimizer, help!
+
+static const char* strThru(const char* s);
+static const char* strThru(const char* out) { return out;}
+
+co_obj_t *co_uint64_create(const uint64_t input, const uint8_t flags);
+static Uint64* u64(uint64_t in);
+
+static Uint64* (uint64_t in){ return co_uint64_create(in, COLUA_OWNFLAG); }
+
+#Function Uint64.new_str co_uint64_create: Uint64{_} @ S{in}  X{input;(uint64_t)strtoull(in,NULL,10);uint64_t}
+#Function Uint64.new_num co_uint64_create: Uint64{_} @ N{in}  X{input;(uint64_t)floor(in);uint64_t}
+
+#Function Uint64.__add u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data+b->data;uint64_t}
+#Function Uint64.__sub u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data-b->data;uint64_t}
+#Function Uint64.__mul u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data*b->data;uint64_t}
+#Function Uint64.__div u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data/b->data;uint64_t}
+#Function Uint64.__mod u64: Uint64{_} @ Uint64{a} Uint64{b} X{in;a->data%b->data;uint64_t}
+#Function Uint64.__len intThru: N{_} @ Uint64{a} X{in;floor( log2(a->data) + 1 );int}
+#Function Uint64.__eq intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data==b->data;int}
+#Function Uint64.__lt intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data==b->data;int}
+#Function Uint64.__le intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data==b->data;int}
+#Function Uint64.__tostring strThru: S{_} @ Uint64{a} X{out;lwcFmt("%ull",a->data);const char*}
+void (*Uint64__gcoll)(Uint64*) = Obj__gcoll;
+
+
+co_obj_t *co_int64_create(const int64_t input, const int8_t flags);
+static    Int64* i64(int64_t out);
+static    Int64* (int64_t out){ return co_int64_create(out, COLUA_OWNFLAG); }
+#Function Int64.new_str co_int64_create:            Int64{_}       @ S{in}  X{input;(int64_t)strtoll(in,NULL,10);int64_t}
+#Function Int64.new_num co_int64_create:            Int64{_}       @ N{in}  X{input;(int64_t)floor(in);int64_t}
+#Function Int64.__add i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data+b->data;uint64_t}
+#Function Int64.__sub i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data-b->data;uint64_t}
+#Function Int64.__mul i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data*b->data;uint64_t}
+#Function Int64.__div i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data/b->data;uint64_t}
+#Function Int64.__mod i64:               Int64{_} @ Int64{a} Int64{b} X{out;a->data%b->data;uint64_t}
+#Function Int64.__unm i64:               Int64{_} @ Int64{a}          X{out;-(a->data);uint64_t}
+#Function Int64.__eq boolOP: B{_}     @  Int64{a}   Int64{b}          X{out;a->data==b->data;int}
+#Function Int64.__lt boolOP: B{_}     @  Int64{a}   Int64{b}          X{out;a->data==b->data;int}
+#Function Int64.__le boolOP: B{_}     @  Int64{a}   Int64{b}          X{out;a->data==b->data;int}
+#Function Int64.__len intThru: N{_}   @  Int64{a}                     X{out;floor( log2(a->data) + 1 );int}
+void    (*Int64__gcoll)                 (Int64*)                      = Obj__gcoll;
+#Function Int64.__tostring strThru: \
+S{_} @    Int64{a}                                                   X{out;lwcFmt("%dll",a->data);const char*}
+
+
+
+/** 
  * @brief sets node id using last four bytes of device's MAC address
  * @param mac the MAC address of the devic
  * @param mac_size the size of the MAC address
@@ -1220,13 +1303,13 @@ co_obj_t *co_node_value(_treenode_t *node);
  * @param klen length of key
  */
 #Function Tree.find_node co_tree_find_node: \
-    Str8{_->key} Obj{_->value} @ Tree{self} L{key;klen;size_t} X{root;self->root;_treenode_t *}
+    Str32{_->key} Obj{_->value} @ Tree{self} L{key;klen;size_t} X{root;self->root;_treenode_t *}
 
 /**
  * @brief return root node of tree object
  * @param tree tree object that contains root
  */
-#Function Tree.root co_tree_root: Str8{_->key} Obj{_->value} @ Tree{self}
+#Function Tree.root co_tree_root: Str32{_->key} Obj{_->value} @ Tree{self}
 
 /**
  * @brief return length (number of key-value pairs) of given tree

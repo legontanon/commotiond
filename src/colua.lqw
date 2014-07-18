@@ -1,7 +1,7 @@
 /* vim: set ts=2 expandtab: */
 /**
  *       @file  colua.lqw
- *      @brief  a Commontiond API for the Lua programming Language
+ *      @brief  the Commontiond API for the Lua programming Language
  *
  *     @author  Luis E. Garcia Ontanon <luis@ontanon.org>
  *
@@ -10,7 +10,7 @@
  *    Revision  $Id:  $
  *    Compiler  gcc/g++
  *     Company  The Open Technology Institute
- *   Copyright  Copyright (c) 2013, Josh King
+ *   Copyright  Copyright (c) 2014, Luis E. Garcia Ontanon
  *
  * This file is part of Commotion, Copyright (c) 2013, Josh King
  *
@@ -32,71 +32,58 @@
 
 #Module Commotion static
 
-/* the space between # and include disables parsing of the include file by lqw */
-# include <sys/socket.h> // AF_INET
-# include <math.h> // floor()
+#include <sys/socket.h> // AF_INET
+#include <math.h> // floor(), log2()
+/* the space between # and include disables parsing of the include file by lqw (only "" includes are parsed, not <>) */
 # include "config.h"
 # include "debug.h"
-#include "commotion.h"
 #include "obj.h"
-#include "list.h"
-#include "tree.h"
 #include "cmd.h"
-#include "msg.h"
-#include "iface.h"
 #include "id.h"
+#include "commotion.h"
+#include "iface.h"
+#include "list.h"
+#include "msg.h"
 #include "loop.h"
 #include "plugin.h"
 #include "process.h"
 #include "profile.h"
 #include "socket.h"
+#include "tree.h"
 #include "util.h"
 
 
+/* This is used for dummy classes, those without contructors,
+   so that no objects will ever be created. Used just for naming functions */
 tyepdef struct dummy {int i;} dummy_t;
 
-/* cmd.h */
-#Class Cmd co_str8_t
-
-/* commotion.h */
+// Effectivelly every real class is co_obj_t
 #Class Connection co_obj_t
 #Class Request co_obj_t
 #Class Response co_obj_t
 
-/* iface.h */
 #Class Iface co_iface_t
-
-/* list.h */
-#Class List co_obj_t
-
-/* loop.h */
-#OwnClass Loop dummy_t
 #Class Timer co_obj_t
-
-/* plugin.h */
-#Class Plugin co_obj_t
-
-/* process.h */
+#Class Cmd co_str8_t
 #Class Process co_process_t
-#Class ProcessProf co_process_t
-
-/* profile.h */
 #Class Profile co_obj_t
 
-/* socket.h*/
 #Class Soket co_socket_t
 #Class USocket co_socket_t
 #Class Fd co_fd_t
 
 #Class Tree co_tree32_t
+#Class List co_obj_t
 
-#OwnClass Node dummy_t
-#OwnClass Debug dummy_t
-
-#Class Str32 co_str32_t
+#Class Str co_str32_t
 #Class Uint64 co_uint64_t
 #Class Int64 co_int64_t
 
+#OwnClass Node dummy_t
+#OwnClass Debug dummy_t
+#OwnClass Loop dummy_t
+
+// the "fake" class is co_obj_t as well...
 #OwnClass Obj co_obj_t
 
 /****************************************************************/
@@ -114,7 +101,7 @@ LQW_MODE int Debug__clean_errno(luaState* L) {
     return 0;
 }
 
-#define DebugWrap(N) LQW_MODE int Debug__#N(luaState* L) { pushS(L,lqw_Fmt(checkS(L,1))); return 1; }
+#define DebugWrap(N) LQW_MODE int Debug__#N(luaState* L) { N("%s",checkS(L,1)); return 0; }
 
 #OwnFunction Debug.ERROR
 DebugWrap(ERROR);
@@ -204,7 +191,7 @@ static int gcObj(lua_State* L,int idx) {
     if(lua_type(L,idx) == LUA_TUSERDATA) 
         o = lua_touserdata(L,idx);
     else {
-        Error()
+        lwqError("Not Userdata!")
         return 0;
     }
     
@@ -339,7 +326,7 @@ static int pushObj(lua_State* L, co_obj_t* o) {
     }
     WARN("Unsupported type (%d)", o->type );
     error:
-        R0;
+        return 0;
 }
 
 void Obj__gcoll(Obj* o) {
@@ -348,15 +335,14 @@ void Obj__gcoll(Obj* o) {
 
 
 
-#Function Str.create co_str32_create: Str32{_} @ L{input;input_size} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Str.create co_str32_create: Str{_} @ L{input;input_size} X{flags;COLUA_OWNFLAG;uint8_t}
 #Accessor Str.__tostring RO: L{$data;$_len}
 #Accessor Str.__len RO: N{$_len}
-#Function Str.__concat co_str_cat: Str32{dst} N{_} @ Str32{a} Str32{src} X{dst;co_str_copy(a);Str32*} X{size;65536;size_t}
-#Function Str.__eq co_str_cmp: B{(_!=0)} @ Str32{a} Str32{b}
-#Function Str.__lt co_str_cmp: B{(_<0)} @ Str32{a} Str32{b}
-#Function Str.__le co_str_cmp: B{(_<=0)} @ Str32{a} Str32{b}
-void (*Str32__gcoll)(Str32*) = Obj__gcoll;
-
+#Function Str.__concat co_str_cat: Str{dst} N{_} @ Str{a} Str{src} X{dst;co_str_copy(a);Str*} X{size;65536;size_t}
+#Function Str.__eq co_str_cmp: B{(_!=0)} @ Str{a} Str{b}
+#Function Str.__lt co_str_cmp: B{(_<0)} @ Str{a} Str{b}
+#Function Str.__le co_str_cmp: B{(_<=0)} @ Str{a} Str{b}
+static void (*Str__gcoll)(Str*) = Obj__gcoll;
 
 
 static int intThru(int out); // lqw needs it
@@ -364,7 +350,6 @@ static int intThru(int out) { return out; }
 
 static const char* strThru(const char* out); // lqw needs it
 static const char* strThru(const char* out) { return out;}
-
 
 
 #define u64 co_uint64_create /* cheat for size */
@@ -380,11 +365,11 @@ co_obj_t *u64(const uint64_t input, const uint8_t flags);
 #Function Uint64.__div u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data/b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Uint64.__mod u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data%b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 
-#Function Uint64.__eq intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data==b->data;int}
-#Function Uint64.__lt intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data< b->data;int}
-#Function Uint64.__le intThru: B{_} @ Uint64{a} Uint64{b} X{in;a->data<=b->data;int}
+#Function Uint64.__eq intThru: B{_} @ Uint64{a} Uint64{b} X{out;a->data==b->data;int}
+#Function Uint64.__lt intThru: B{_} @ Uint64{a} Uint64{b} X{out;a->data< b->data;int}
+#Function Uint64.__le intThru: B{_} @ Uint64{a} Uint64{b} X{out;a->data<=b->data;int}
 
-#Function Uint64.__len intThru: N{_} @ Uint64{a} X{in;floor( log2(a->data) + 1 );int}
+#Function Uint64.__len intThru: N{_} @ Uint64{a} X{out;floor( log2(a->data) + 1 );int}
 #Function Uint64.__tostring strThru: S{_} @ Uint64{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 void (*Uint64__gcoll)(Uint64*) = Obj__gcoll;
@@ -403,11 +388,11 @@ co_obj_t *i64(const int64_t input, const uint8_t flags);
 #Function Int64.__div i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data/b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Int64.__mod i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data%b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 
-#Function Int64.__eq intThru: B{_} @ Int64{a} Int64{b} X{in;a->data==b->data;int}
-#Function Int64.__lt intThru: B{_} @ Int64{a} Int64{b} X{in;a->data< b->data;int}
-#Function Int64.__le intThru: B{_} @ Int64{a} Int64{b} X{in;a->data<=b->data;int}
+#Function Int64.__eq intThru: B{_} @ Int64{a} Int64{b} X{out;a->data==b->data;int}
+#Function Int64.__lt intThru: B{_} @ Int64{a} Int64{b} X{out;a->data< b->data;int}
+#Function Int64.__le intThru: B{_} @ Int64{a} Int64{b} X{out;a->data<=b->data;int}
 
-#Function Int64.__len intThru: N{_} @ Int64{a} X{in;floor( log2(a->data) + 1 );int}
+#Function Int64.__len intThru: N{_} @ Int64{a} X{out;floor( log2(a->data) + 1 );int}
 #Function Int64.__tostring strThru: S{_} @ Int64{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 void (*Int64__gcoll)(Int64*) = Obj__gcoll;
@@ -421,7 +406,6 @@ void (*Int64__gcoll)(Int64*) = Obj__gcoll;
  * @param mac_size the size of the MAC address
  */
 #Function Node.set_id_from_mac co_id_set_from_mac: @ L{mac,mac_size}
-void co_id_set_from_mac(const unsigned char *mac, int mac_size);
 
 /**
  * @brief Converts node id from host byte order to network byte order
@@ -433,8 +417,6 @@ void co_id_set_from_mac(const unsigned char *mac, int mac_size);
  * @brief Returns nodeid
  */
 #Function Node.get_id co_id_get: N{_->id} @
-
-
 
 /** @fn init
  * @brief initializes API
@@ -600,19 +582,12 @@ size_t co_list_length(co_obj_t *list);
 #Funcion List.last co_list_get_last: Obj{_} @ List{list}
 
 /**
- * @brief returns each element of the list in succesive calls, NULL when done
- * @param list list object
- * @param pointer to a cookie to mantain state, must be NULL on first call
- */
-co_obj_t * co_list_foreach(co_obj_t *list, void** state);
-
-/**
  * @brief process list with given iterator function
  * @param list list object to process
  * @param iter iterator function
  * @param context additional arguments to iterator
  */
-#CallBack ListIter co_iter_t NULL: Obj{_} @ Obj{current} 
+#CallBack ListIter co_iter_t NULL: Obj{_} @ Obj{current} U{context} U{data}
 #Function List.__call co_list_parse: Obj{_} @ List{list} ListIter{iter} X{context;NULL}
 
 /**
@@ -712,7 +687,7 @@ co_obj_t * co_list_foreach(co_obj_t *list, void** state);
  * @brief invokes cb for each interface
  * @param iter iterator taking the current interface and returning nothing
  */
-#Callback IfaceIter co_iface_iter_t: @ Iface{iface} 
+#Callback IfaceIter co_iface_iter_t: @ Iface{current} U{context} U{data}
 #Function Iface.foreach co_ifaces_foreach: @ IfaceIter{iter} X{ctx;NULL}
 
 
@@ -859,8 +834,8 @@ co_obj_t * co_list_foreach(co_obj_t *list, void** state);
 
 /** @method Iface.status()
   */
-#Value Iface.UP 1
-#Value Iface.DOWN 0
+#Value Iface.UP N{1}
+#Value Iface.DOWN N{0}
 #Accessor Iface.status RO: N{$status}
 
 
@@ -990,28 +965,22 @@ LqwCbKeyStrElem(ProcRestartCB,Process,name)
 #CallBack ProcRestartCB{self} process_idsr_cb: N{_} @ Process{self}
 
 LqwCbKeyStrElem(ProcStartCB,Process,name)
-#OwnCallBack ProcStartCB process_start_cb
+#OwnCallBack ProcStartCB{self} process_start_cb
 static int callProcStartCB(co_obj_t *self, char *argv[]) {
-    int i = 0;
+    int r;
+    const char* k = cbKeyProcStartCB((void*)self);
     
-    lqw_getCb(L,cbKeyProcStartCB((void*)self));
+    lqw_getCb(L,k);
     pushProcess(L,self);
     pushT(L);
-    
-    for (;*(argv);argv++) {
-        pushN(L,++i);
-        pushS(L,*argv);
-        lua_rawset(L, 3);
+    pushTS(L,argv,0);
+        
+    if((r = lua_pcall(L,2,1,0)) != LUA_OK) {
+        lqwPcallErr(k, r);
+        return 1;
     }
     
-    if(lua_pcall(L,2,1,0)) {
-        //2do: Lua error
-        return 0;
-    } else {
-        int r = toN(L,-1,int);
-        lua_pop(L,1);
-        return r;
-    }
+    return 0;
 }
 
 /** @constructor process.create(name, pid_file, exec_path, run_path, prof)  
@@ -1048,29 +1017,14 @@ LQW_MODE int Process_create(lua_State* L) {
     return 0;
 }
 
-/** @method process.start(argv)
+/** @method process.start(process, argv)
   * @param argv an optional table containing the string arguments (max 255) to the start procedure
   */
 #OwnFunction Process.start
 LQW_MODE int Process_start(lua_State* L) {
-    co_obj_t *self = checkProcess(L1);
-    char* argv[255];
-    argv[0]=NULL;
-    
-    if (lua_type(L2) == LUA_TTABLE) {
-        lua_pushnil(L);
-        while (lua_next(L2) != 0) {
-            if (i>255) break;
-            argv[i] = toS(L, -1);
-            lua_pop(L1);
-            if (argv[i] == NULL) break;
-            argv[++i] = NULL;
-        }
-        
-        pushN(L,co_process_start(self,argv));
-        return 1;
-    }
-    return 0;
+    char* argv[255];    
+    pushN(L,co_process_start(checkProcess(L,1),checkTS(L,2,argv,255)));
+    return 1;
 }
 
 /** @method process.__tostring()
@@ -1310,13 +1264,13 @@ co_obj_t *co_node_value(_treenode_t *node);
  * @param klen length of key
  */
 #Function Tree.find_node co_tree_find_node: \
-    Str32{_->key} Obj{_->value} @ Tree{self} L{key;klen;size_t} X{root;self->root;_treenode_t *}
+    Str{_->key} Obj{_->value} @ Tree{self} L{key;klen;size_t} X{root;self->root;_treenode_t *}
 
 /**
  * @brief return root node of tree object
  * @param tree tree object that contains root
  */
-#Function Tree.root co_tree_root: Str32{_->key} Obj{_->value} @ Tree{self}
+#Function Tree.root co_tree_root: Str{_->key} Obj{_->value} @ Tree{self}
 
 /**
  * @brief return length (number of key-value pairs) of given tree

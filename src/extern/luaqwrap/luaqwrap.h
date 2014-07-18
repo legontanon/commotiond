@@ -35,6 +35,22 @@
 # define ROTBUF_NBUFS 16
 #endif 
 
+
+
+
+
+typedef struct lwcTblIt {
+    int lua_type;
+    union {
+        int boolean;
+        void* ptr;
+        luaNumber number;
+        struct _str { const char* s; size_t slen; } string;
+        struct lwcTblIt* table;
+    } data;
+} lwcTblIt;
+
+
 /**************************************************************************/
 /* Lua shortcuts */
 #define toS lua_tostring
@@ -72,6 +88,7 @@
 #define shiftNil(L,i) //2do (fn)
 
 #define isF(L,i) ((lua_type(L, i) == LUA_TFUNCTION) || lua_type(L, i) == LUA_TCFUNCTION))
+#define checkF(L,i,cb) ( (isF(L,i) || lwcArgErr(L,i,"Must Be a Function")) ? cb : NULL )
 
 #define isLF(L,i) (lua_type(L, i) == LUA_TFUNCTION)
 #define isCF(L,i) (lua_type(L, i) == LUA_TCFUNCTION)
@@ -79,7 +96,6 @@
 #define pushCF lua_pushcfunction
 
 #define isT(L,i) (lua_type(L, i) == LUA_TTABLE)
-#define ckeckT(L,i) do { if(lua_type(L, i) == LUA_TTABLE) ArgError(i,"not a table");
 #define pushT lua_newtable
 
 #define getReg(k) lua_getfield(L, LUA_REGISTRYINDEX,(k))
@@ -197,18 +213,20 @@ typedef const char* (*lqwCbKey)(void* ptr);
 #define LqwCbKeyStrElem(CB,C,E) LQW_MODE const char* cbKey##CB(void* p) { return lqwFmt(#CB ":%s",((C*)p)->E); }
 #define LqwCbKeyPtrElem(CB,C,E) LQW_MODE const char* cbKey##CB(void* p) { return lqwFmt(#CB ":%p",((C*)p)->E); }
 
+void lqwPcallErr(const char* name, int ret);
+
 /****************************************************************/
 
 /*
  * it creates the class and its tables and leaves it on top of the stack.
  */
-LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, luaL_Reg* meta, lua_CFunction __gc);
+LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, luaL_Reg* meta);
 
 /* ... to be added to a given table (idx)*/
-#define LqwClassRegister(C,idx) { pushS(L,#C); lqwClassCreate(L,#C,C##_methods,C##_meta,C##__gc); lua_settable(L,idx); }
+#define LqwClassRegister(C,idx) { lqwClassCreate(L,#C,C##_methods,C##_meta); lua_setfield(L,idx,#C); }
 
 /* ... or to the global namespace */
-#define LqwClassRegister(C) { pushS(L,#C); lqwClassCreate(L,#C,C##_methods,C##_meta,C##__gc); lua_setglobal(L,-1); }
+#define LqwClassRegisterG(C) {  lqwClassCreate(L,#C,C##_methods,C##_meta); lua_setfield(L,LUA_GLOBALSINDEX,#C); }
 
 /* LuaWrapDeclarations and LuaWrapDefinitions
  */
@@ -233,7 +251,14 @@ LQW_MODE lua_State* lqwState(void);
 LQW_MODE int lqwCleanup(void);
 
 LQW_MODE int lqwNop(lua_State* L); // do nothing
+LQW_MODE void lqw_getCb(lua_State* L, const char* cbk);
+LQW_MODE void lqw_setCb(lua_State* L, int idx, const char* cbk);
+LQW_MODE void lwqCheckCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[]) ;
+LQW_MODE void lwqSetCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[], void* self);
+LQW_MODE static void lqwSetFuncs(lua_State *L, const luaL_Reg *l, int nup);
 
+LQW_MODE lwcTblIt* ckeckT(luaState* L, int idx, size_t* np);
+LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, luaL_Reg* meta, lua_CFunction __gc);
 
 /*
  * RegisterFunction(name)
@@ -253,14 +278,8 @@ LQW_MODE int lqwNop(lua_State* L); // do nothing
 #define Methods LQW_MODE const luaL_Reg
 #define Meta LQW_MODE const luaL_Reg
 
-/* throws an error */
-#define LqwError(error) do { luaL_error(L, error ); return 0; } while(0)
-
-/* throws an error for a bad argument */
-#define ArgError(idx,error) do { luaL_argerror(L,idx,error); return 0; } while(0)
-
-/* throws an error for a bad optional argument */
-#define OptArgError(idx,error) do { luaL_argerror(L,idx, error); return 0; } while(0)
+int lqwError(luaState* L, const char* error);
+int lqwArgError(luaState* L, int idx, const char* error)
 
 /* for setting globals */
 #define setGlobalB(L,n,v) { pushB(L,v); lua_setglobal(L,n); }
@@ -271,7 +290,6 @@ LQW_MODE int lqwNop(lua_State* L); // do nothing
 #define LqwRealoc2lua_Alloc(N,Realloc,Free) \
 static void* N (void *ud, void *ptr, size_t osize, size_t nsize) \
    { if (nsize) return Realloc(ptr, nsize); else {Free(ptr); return NULL;} }
-
 
 
 

@@ -34,12 +34,12 @@ do
     local mode = 'static'
 
     local function dup_to(t) -- I create tables that will copy to the given table (err if key exists)
-        -- used to guarantee uniqueness of names between different objects
+        -- used to guarantee uniqueness of names between different tables, or if called as dup_to({}) a single table
         return setmetatable({},{
             __newindex=function(o,k,v)
                 local e = t[k];
                 if e then
-                    EF("duplicate name: %s previously used in %s:%d",k, o.filename, o.ln)
+                    EF("duplicate name: '%s' previously used in %s:%d",k, o.filename, o.ln)
                 end
                 rawset(o,k,v);
                 t[k]=v;
@@ -53,8 +53,8 @@ do
     local classes = dup_to(types) -- I hold the collection of classes (by name)
     local functions = dup_to(types) -- I hold the collection of functions that are not in a class (by name)
     local enums = dup_to(types) -- I hold the enumerations (by name) -- nothing for now
-    local callbacks = dup_to(types) -- I hold the callbacks (by name) -- nothing for now
-
+    local callbacks = dup_to(types) -- I hold the callbacks (by name)
+    local values = dup_to(types) -- I hold Lua values to be added (by name) 
     local test -- I'm a dummy for: test = cond or error()
     
     -- utility stuff
@@ -81,14 +81,10 @@ do
         local function replace(m)
             if m:match("[.]") then
                 local r = o
-                print("<--");
                 
                 for i,el in ipairs(m:split(".",".")) do 
-                    print(i,el);
-                    r = r[el]
-                    test = r or EF("No such element in table: '%s'",m)
+                    r = r[el] or EF("No such element in table: '%s'",m)
                 end
-                print("-->");
                 return r
             else
                 return o[m]
@@ -101,8 +97,6 @@ do
     string.F = fmt_o
 
     local function xor(a,b) return (a and not b) or (b and not a) end
-    
-
     
     local function v2s(t,i,_s) -- I dump stuff into a string 
         i = i or "";
@@ -378,6 +372,42 @@ do
 
         return f("%s%s  return %d;\n}\n",s,s2,#m.rets)
     end
+    
+    local function accessor2C(a) -- given a method I yield C code for it
+        test = a.name or E("function without a name");
+        test = a.proto or EF("function '%s' without a prototype",m.name);
+
+        local s = F("static int %{cname}_%{name}(lua_State* L) {\n %{cname}* __o = check%{cname}(L,1);\n",a)
+
+        if a.type == 'RW' then 
+            s = s .. ' if (lua_gettop(L)>1) {\n'
+            for name,_in in pairs(a.ins) do
+                local function SNB(arg) return (" (%{expr}) = check%{t}(L,%{idx});"):F(arg) end
+                s = s .. {
+                    L=function(arg) return (" (%{expr}) = checkL(L,%{idx},&(%{len_expr}));"):F(arg) end,
+                    O=function(arg) return (" (%{expr}) = check%{type}(L,%{idx}));"):F(arg) end,
+                    S=SNB,N=SNB,B=SNB
+                }[arg.t](_in)
+            end
+            s = s .. ' } else {\n'
+        end
+        
+        for idx,ret in pairs(m.outs) do
+            local function SNB(arg) return (" push%{t}(L,(%{expr}));"):F(arg) end
+            s = s .. {
+                L=function(arg) return (" pushL(L,(%{expr}),&(%{len_expr}));"):F(arg) end,
+                O=function(arg) return (" push%{type}(L,(%{expr})));"):F(arg) end,
+                S=SNB,N=SNB,B=SNB
+            }[arg.t](ret)        end
+
+        if a.type == 'RW' then 
+            s = s .. '}'
+        end
+        
+        local sout = f("%s  return %d;\n}\n",s,#a.outs)
+        return sout:gsub("[$]","__o->")
+    end
+    
 
     local function class2C(c) -- given a class I yield C code for its basic functions or declarations
         return F("typedef %{type} %{name};\n"..((c.own and "LqwDeclareClass(%{name});\n") or "LqwDefineClass(%{name});\n"),c)
@@ -398,10 +428,13 @@ do
             for name, m in pairs(c.meta) do
                 s = s .. F('    {"%{name}",%{codename}},\n',m)
             end
-            s = s .. "    {NULL,NULL}};\n"
+            s = s .. '    {"__gc",%{name}___gc},\n    {NULL,NULL}};\n'
             
-            b = b .. F('  lqwClassRegister(%{name},1);\n',c)
+            b = b .. F('  LqwClassRegister(%{name});\n',c)
 
+            for name, v in pairs(c.values) do
+                b = b .. F('  push%{t}(L,(%{expr}));\n  lua_setfield(L,-2,"%{name}");\n',v)
+            end
         end
         
         s = s .. "  lual_Reg* functions = {\n"
@@ -410,9 +443,22 @@ do
         end
         s = s .. "    {NULL,NULL}};\n  lual_Reg* f;\n\n"
         b = b .. "  \n  for (f=functions;f->name;f++) {\n" ..
-                 "    pushS(L,f->name); lua_pushcfunction(L,f->func); lua_settable(L,1);\n  }\n\n"
+                 '    lua_pushcfunction(L,f->func); lua_setfield(L,1,f->name);\n  }\n\n'
         
-        return s .. b .. "  return 1;\n}\n"
+        for name, v in pairs(values) do
+            b = b .. F('  push%{t}(L,(%{expr}));\n  lua_setfield(L,1,"%{name}");\n',v)
+        end
+        
+        local cb = '  /* Register C Callbacks */\n'
+        for tname, cbf in pairs(callbacks) do
+            cb = cb .. "   lua_newtable (L);\n"
+            for name, ccb in pairs(cbf.c_cbs) do
+                cb = cb .. f('     lwcRegCB(L, -1, "%s", %s,"%s");\n',name,ccb.fn_name,ccb.tname);
+            end
+            cb = cb .. f('    lua_setfield(L,1,"%s");\n',tname);
+        end
+        
+        return s .. b .. cb .. "  return 1;\n}\n"
     end
 
     local cb_arg_t = {
@@ -458,76 +504,69 @@ do
     }
     
 
-    local function cb2C(c) -- given a callback I yield C code for i
+    local function cb2C(c) -- given a callback I yield C code for it
         D(c)
-        local s = ""
+        local start = ""
         local call = ""
+        local check = 'LQW_MODE %{name} check%{name}(luaState* L, int idx'
 
         if c.mode == 'closure' then
-            s = F("static int %{name}__fn_idx;\n",c);
+            start = "static int %{name}__fn_idx;\n"
+            check = check .. ") {\n"
+            call = call  .. '  lua_replace(L, %{name}__fn_idx );\n'
         else
-            call = F('  int fn_idx = lua_gettop(L)+1;\n  lqw_getCb(L,cbKey%{name}((void*)(%{key_name})));\n',c);
+            call = '  __fn_idx = lua_gettop(L)+1;\n'
+                .. '  int __res;\n'
+                .. '  const char* __key = cbKey%{name}((void*)(%{key_name}));\n'
+              .. '\n  lua_getfield(L, LUA_REGISTRYINDEX, __key );\n'
+            
+            check = check .. ", void* %{key_name}) {\n"
         end
-        
-        s = s .. F("LQW_MODE %{proto.type} call%{name}(%{proto.arglist}) {\n  luaState* L = lwState();",c)
-        
-        if c.proto.type ~= 'void' then
-            s = s .. F("\n  %{proto.type} _ = %{ret_def};\n",c)
-        end
-        
-        local cf = 'LQW_MODE %{name} check%{name}(luaState* L, int idx'
-        
+
+        check = check .. "  %{proto.name} fn;\n"
         if c.mode == 'closure' then
-            cf = cf .. F(") {\n",c)
-        else
-            cf = cf .. F(", void* %{key_name}) {\n",c)
+            check = check .. '  %{name}__fn_idx = idx;\n fn = checkCB(L, idx, call%{name}, NULL, NULL, "%{name}");\n'
+        else 
+            check = check .. '  fn = checkCB(L, idx, call%{name}, cbKey%{name}, %{key_name}, "%{name}");\n'
         end
+        check = check .. "\n return fn;\n}\n";
         
+        start = start .. "LQW_MODE %{proto.type} call%{name}(%{proto.arglist}) {\n  luaState* L = lwState();"
+                      .. (c.proto.type ~= 'void' and "\n  %{proto.type} _ = %{ret_def};\n" or "")
+
         for idx, a in ipairs(c.args) do
             local c = cb_arg_t[a.t] or function(a) return "" end
             call = call .. c(a);
         end
-        
-        if c.mode == 'closure' then
-            call = call .. f("  if((__res = lua_pcall(L, %d, %d, %s__fn_idx)== LUA_OK)){\n",#c.args,#c.rets,c.name)
-        else
-            call = call .. f("  if((__res = lua_pcall(L, %d, %d, fn_idx)== LUA_OK)){\n",#c.args,#c.rets)
-        end
+                
+        call = call .. f("  if((__res = lua_pcall(L, %d, %d, 0})== LUA_OK)){\n",#c.args,#c.rets)
         
         for idx,r in ipairs(c.rets) do
             local c = cb_ret_t[r.t] or EF("return %{name} is of invalid type '%{t}'",r);
-            local d, b = c(r);
+            local decls, body = c(r);
             
-            s = s .. d
-            call = call .. b
+            start = start .. decls
+            call = call .. body
         end
         
         call  = call .. f("    lua_pop(L,%d)\n",#c.rets)
         
         if c.proto.type ~= 'void' then
-            call = call .. F("    return _;\n",c)
+            call = call .. "    return _;\n"
         else
-            call = call .. F("    return;\n",c)
+            call = call .. "    return;\n"
         end
                 
-        call = call .. F('  } else lwPcallErr(%{name},__res);\n\n',c)
+        call = call .. '  } else lqwPcallErr(__key,__res);\n\n'
 
         if c.proto.type ~= 'void' then
-            call = call .. F("  return _;\n}\n",c)
+            call = call .. "  return _;\n}\n"
         else
             call = call .. "  return;\n}\n"
         end
         
-        cf = cf .. "  checkF(L,idx);\n"
-        
-        if c.mode == 'closure' then
-            cf = cf .. "  %{name}__fn_idx = idx;\n"
-        else 
-            cf = cf .. '  lqw_setCb(L,cbKey%{name}(%{key_name}));\n'
-        end
-        cf = cf .. "\n return call%{name};\n}\n";
                 
-        return s .. call  .. F(cf,c);
+        return  F(start .. call ..check, c);
     end
     
     
@@ -609,8 +648,9 @@ do
 
     
     local function class (params,val,frame)
-        if not module_name then E("no module defined") end        
-        local c = {filename=frame.filename,ln=frame.ln, methods={}, meta = {}}
+        local c = {filename=frame.filename,ln=frame.ln,
+            methods=dup_to({}), meta = dup_to({}), values=dup_to({})
+        }
         local p = params:split("%s"," ","+");
         
         c.name = p[1]:match("^([%w_]+)$") or E("Class must have a name [A-Z][A-Za-z0-9_]+")
@@ -639,38 +679,85 @@ do
     end
 
     function lqw_cmd.Alias(params,val,frame)
-       if not module_name then E("no module defined") end        
-       log(5,'Alias:',params,val)
-        do return end
-        local a = {}
-        log(3,'Alias:',a)
+        local c,n,tc,tn = params:M("^%s*(%u[%w_]+)[.]?([%w_]+)%s+(%u[%w_]+)[.]([%w_]+)%s*$")
+        test = c and c and tc and tn or E("Malformed Alias")
+        local (d = tc~='' and functions) or (classes[tc]or E("no such class '%s'",tc))[tn:M('^__') and 'meta' or 'methods']
+        local (s = c ~='' and functions) or (classes[c] or E("no such class '%s'",c ))[ n:M('^__') and 'meta' or 'methods']
+        d[n] = s[tn]
     end
    
+
+    local acc_NSB = {"expr"}
+    local acc_t = {
+        N=acc_NSBO,   
+        S=acc_NSBO,
+        B=acc_NSBO,
+        O=acc_NSBO,
+        L={"expr,len_expr"}
+    }
     
     function lqw_cmd.Accessor(params,val,frame)
-        if not module_name then E("no module defined") end        
-        log(5,'Accessor:',params,val)
-        do return end
+-- #Accessor Str.__tostring RO: L{$data;$_len}
+-- #Accessor Uint32.value RW: N{$data} @ N{$data}
+        
+        local a = { }
+        a.cname, a.name, a.type = params:M("^%s*(%u[%w]+)[.]([%w_]+)%s+(R[WO])%s*$")
+        local c = classes[cname] or E("No such class '%s'",cname)
+        local ins, outs = val:M("^%s*([^@]*)%s*@%s*(.*)%s*$")
+        a.ins = splitList(ins,acc_t)
+        a.outs = splitList(outs,acc_t)
+        
+        
+        c[a.name:M("^__") and 'meta' or 'methods'][a.name] = a
+        
+        local s = accessor2C(a)
     end
     
     function lqw_cmd.OwnFunction(params,val,frame)
-        if not module_name then E("no module defined") end        
         log(5,'OwnFunction:',params,val)
-        do return end
+        
+        
+        local cname, name = params:M("^%s*(%u[%w]+)[.]([%w_]+)%s*$")
+
+        if not cname then
+            name = params:M("^%s*([%w_]+)%s*$") or EF("Didn't found a valid name")
+            functions[name] = {
+                fullname=name, name=name, codename=f("%s_%s",module_name,name),
+                own=true, filename=frame.filename, ln=frame.ln
+            }
+        else
+            local c = class[cname] or EF("No such class %s",cname)
+            local cont = name:M("^__") and c.meta or c.methods
+            cont[name] = {
+                fullname=f("%s.%s",cname,name),cname=cname, name=name, codename=f("%s_%s",cname,name),
+                own=true, filename=frame.filename, ln=frame.ln
+            }
+        end
     end
 
+    function lqw_cmd.OwnCallBack(params,val,frame)
+        log(5,'OwnCallBack:',params,val)
+        local m={own=true, filename=frame.filename, ln=frame.ln, is_cb=true, t='F', c_cbs={}}
+        local m.name, m.key_name = params:match("^%s*(%u[%g]+)[{]?([%w_]*)[}]?%s*$")
+            
+        test = m.name or EF("CallBack %s has no good name",params);
+            
+        mode = (m.key_name and m.key_name ~= '' and 'key') or 'closure'
+            
+        callbacks[name] = m
+    end
+
+    local finished= false
+    
     function lqw_cmd.Finish(params,val,frame)
-        if not module_name then E("no module defined") end        
         log(5,'Finish:',params,val)
         local fname = params:M("^%s*([%g_]+)%s*$") or E("Not a valid registration function name");
         local s = registration2C(fname);
-
         frame.add(s);
+        finished = true
     end
     
     local function shift(t) return table.remove(t,1) end
-
-    
 
     local arg_t_opts = { -- options for function arguments part
         N={"name","type","default"},
@@ -691,10 +778,12 @@ do
     }        
     
     function lqw_cmd.Function(params,val,frame,m)
-        if not module_name then E("no module defined") end        
+        
         log(2,'Function:',params,val)
         local m = m or {
-            filename=frame.filename, ln=frame.ln, rets={}, args={}, names={}, params=params, expr=val
+            filename=frame.filename, ln=frame.ln,
+            rets=dup_to({}), args=dup_to({}), names=dup_to({}),
+            params=params, expr=val
         }
         
         local pars = params:split("%s"," ",'+');
@@ -760,19 +849,60 @@ do
     end
 
     function lqw_cmd.CallBack(params,val,frame)
-        if not module_name then E("no module defined") end
         
         local cb = lqw_cmd.Function(params,val,frame,{
             is_cb=true,filename=frame.filename, ln=frame.ln,
-            rets={}, args={}, names={}, params=params, expr=val, t='F'
+            rets=dup_to({}), args=dup_to({}), names=dup_to({}), params=params, expr=val, t='F', c_cbs=dup_to({})
         })
     end
     
+    
+    function lqw_cmd.Value(params,val,frame)
+        local v = {}
+        v.cname, v.name, v.t, v.expr = params:M("^%s*(%u?[%w]*)[.]?([%w_]+)%s+(%u[%w_]*)%s+(.*)$")
+        local collection
+    
+        test = v.t:M("^[NSB]$") or ( classes[v.t] or EF("No such type for Value: '%s'",v.t) )            
+            
+        if (v.cname) then
+            v.fullname = v.cname .. '.' .. v.name
+            
+            (classes[v.cname] or EF("no such class: '%s'",v.cname)).values[v.name] = v 
+        else 
+            v.fullname = v.name
+            values[v.name] = v;
+        end
+
+    end
+    
+
+    function lqw_cmd.CCallBack(params,val,frame)
+        log(5,'CCallBack:',params,val)
+        local m={own=true, filename=frame.filename, ln=frame.ln, is_cb=true, t='F',c}
+        local m.tname, m.name, m.fn_name = params:match("^%s*(%u[%w]+)%s+([%w_]+)%s+([%w+]+)%s*$")
+        test = m.tname or E("Invalid CallBack name!")
+        test = m.name or E("Invalid name!")
+        test = m.fn_name or E("Invalid fn_name!")
+        
+        m.proto = prototypes[m.fn_name] or EF("no prototype found for: '%s'",m.fn_name) 
+
+        test = m.proto.typedef and EF("Prototype '%s' must be that of a function.",m.fn_name);
+                    
+        mode = (m.key_name and m.key_name ~= '' and 'key') or 'closure'
+            
+        local c = callbacks[m.tname] or EF("no such CallBack '%s'",m.tname)
+        c.c_cbs[m.name] = m;
+        
+    end
     
     local function lwcmd(lwc,frame,stack)
         local cmd,params,val = lwc:match("(%u[%w]+)%s*([^:]*)[:]?%s*(.*)%s*")
         log(1,"LWD:", lwc,cmd,params,val)
         frame.add(f("// %s:%d #%s\n",frame.filename,frame.ln, lwc))
+        if cmd != 'Module' and not module_name then E("no module defined") end
+        if finished then E("no commands after Finish.") end
+
+        
         if cmd == 'ProcFile' then
             local infile, outfile = lwc:match('ProcFile%s+([^%s]+)%s*([^%s]*)%s*')
             

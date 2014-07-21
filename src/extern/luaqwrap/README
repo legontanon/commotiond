@@ -3,12 +3,19 @@ Copyright (c) 2014, Luis Enrique Garcia Ontanon
 
 LuaQWrap is a code generator to quickly create Lua bindings for C APIs.
 
-luawrap.lua parses the original file (.lqw) copying it into its outfile
+luaqwrap.lua parses the original file (.lqw) copying it into its outfile
 looking for directives in #Directives and replaces them with the
-appropriate C code. The .lqw file is C with special #preprocessor lines
-that are called directives.
+appropriate C code.
 
-LuaWrap directives are:
+usage:
+  luaqwrap.lua [verbosity] <source> <target>
+  verbosity: a number from 1-6 (if given it outputs the log in <source>.log )
+  source: the filename of the lqw source to be processed
+  target: the filename of the file to be created
+
+
+The .lqw file is C with special #preprocessor like lines that are called directives. 
+the following LuaQWrap directives are defined:
 
 #Module <name> [mode="static"|"extern"]
    Defines the name of the module to be added to the global namespace and sets
@@ -24,36 +31,36 @@ LuaWrap directives are:
  to be used for generating .c files, functions (apart from methods) are extern.
 
 
-
-
 #Class <name> <type>
 #OwnClass <name> <type>
 
-   These define classes to be added to the Lua interface, the name must start with
- a capital and contain only letters, the type is the type of object it points to.
-OwnClass declares only the "primitives" (pushX,checkX,optX,...) leaving up to you
-to define them while Class defines them as well.
+      These define classes to be added to the Lua interface, the name must start with
+    a capital and contain only letters, the type is the type of object it points to.
+    OwnClass just declares the "primitives" (pushX,checkX,optX,...) leaving up to you
+    to define them while Class defines them as well. OwnClass can be user as a dull
+    container for naming purposes.
 
-the "primitives" are:
- * toXxx(L,idx) gets a Xxx from an index (Doesn't throw if fails)
- * checkXxx(L,idx) gets a Xxx from an index after calling check_code (throws on fail)
- * optXxx(L,idx,dflt) gets an Xxx from an index, dflt if it is nil or unexistent 
- * pushXxx(L,xxx) pushes an Xxx into the stack
- * isXxx(L,idx) tests whether we have an Xxx at idx
- * shiftXxx(L,idx) removes and rets an Xxx from idx only if it has a type of Xxx, rets NULL otherwise
- * dumpXxx(L,idx) returns a cheap string representation of the Xxx at pos idx 
+    the "primitives" are:
+     * toXxx(L,idx) gets a Xxx from an index (Doesn't throw if fails)
+     * checkXxx(L,idx) gets a Xxx from an index after calling check_code (throws on fail)
+     * optXxx(L,idx,dflt) gets an Xxx from an index, dflt if it is nil or unexistent 
+     * pushXxx(L,xxx) pushes an Xxx into the stack
+     * isXxx(L,idx) tests whether we have an Xxx at idx
+     * shiftXxx(L,idx) removes and rets an Xxx from idx only if it has a type of Xxx, rets NULL otherwise
+     * dumpXxx(L,idx) returns a cheap string representation of the Xxx at pos idx 
 
-for each class (X) you have to define three functions:
- void X__push(X*);  // to be called when pushing an object into Lua
- void X__check(X*); // to be called to check an object (throws if invalid)
- void X__gcoll(X*); // to be called by the __gc
-LwDefinePushDummy(Xxx) and LwDefineChkDummy(Xxx) and LwDefineGCollDummy(C) might help
+    for each class (X) you have to define three functions:
+     void X__push(X*);  // to be called when pushing an object into Lua
+     void X__check(X*); // to be called to check an object (throws if invalid)
+     void X__gcoll(X*); // to be called by the __gc
+    LwDefinePushDummy(Xxx) and LwDefineChkDummy(Xxx) and LwDefineGCollDummy(C) might help
 
 
 
 #Function: <name> <function-name>: <return-list> @ <arguments-list>
- These define functions for which code is to be generated.
- <name> can be in either:
+   These define functions for which code is to be generated.
+   
+   <name> can be in either:
         "ClassName.method_name" for a method,
         "ClassName.__meta_name" for a metamethod
         "function_name" for funtions not belonging to any class.
@@ -74,8 +81,8 @@ LwDefinePushDummy(Xxx) and LwDefineChkDummy(Xxx) and LwDefineGCollDummy(C) might
    - L{name;len_name;bufsize} a lstring
         len_name is the var that contains the lenght
         bufsize the size of the buffer used to temporarily hold the output
-   - Name{name;ref} an object of class "Name" or a Callback of type "Name"
-
+   - Name{name;ref} either an object of class "Name" or a Callback of type "Name"
+   
 elems in argument-list can be:
         N{name;type;default} a number
             - name the name of the variable
@@ -83,50 +90,89 @@ elems in argument-list can be:
             - default an optional default value
         B{name;default}, a boolean
         S{name;default}, a string
-        L{name;len_name;len_type"}, an lstring
+        L{name;len_name;type;len_type;}, an lstring
             - len_name is the name of the var that contains the length
-            - len_type is the optional (dflt: size_t ) type for the var
+            - type     is the type of the variable (def to const char*)
+            - len_type is the type of the length variable (def to size_t) 
         Name{name;arg2}, either an object or a CallBack function
-          - arg2 default for object, key_name for callback
+          - arg2 default value for object or key_name for callback
         X{name;value;type} a pseudo-argument 
           these are used to manipulate values in the definition of the function/callback
-        K{name,key} a key for a callback (given in the same order as the CB before)
-          - name of the variable
-          - type of key generator
 
-        C-Trigraphs
-        ??= 	#
-        ??/ 	\
-        ??' 	^
-        ??( 	[
-        ??) 	]
-        ??! 	|
-        ??< 	{
-        ??> 	}
-        ??- 	~
+        C-Trigraphs can be very useful... as the argument list won't take either "{", "}" or ";"
+        ??= #   ??/ \   ??' ^   ??( [   ??) ]   ??! |   ??< {   ??> }   ??- ~
+        
+        there's no trigraph for ; but that's not an issue as the parameters can be at most statements.
+        still {} can be used for values of structs, which is the only grammatically correct case of
+        use of those chars.
 
  Function Examples:
     int co_list_contains(co_obj_t *list, co_obj_t *item);
     //LW: Function List.contains co_list_contains: B{_} @ List{list} Obj{item}
 
-    size_t co_list_import(co_obj_t **listp, const char *input, const size_t ilen);
-    //LW: Function List.import co_list_import: List{list} N{_} @ L{input;ilen} X{listp;&list;co_obj_t**}
+    size_t co_list_import(co_obj_t **list, const char *input, const size_t ilen);
+    //LW: Function List.import co_list_import: List{list_out} N{_} @ L{input;ilen} X{listp;&list_out;co_obj_t**}
     
     size_t co_list_raw(char *output, const size_t olen, const co_obj_t *list);    
-    //LW: Function List.raw co_list_raw: L{output,olen;4096} @ List{list}
+    //LW: Function List.raw co_list_raw: L{output;olen;4096} @ List{list}
     
  [[ a whole chapter about manipulation is missing here ]]
 
 
 #Accessor <name> <mode='RO'|'RW'>: <return-list> @ <arguments-list>
-    $name ==> ((X*)ptr->)name
-    TO DO
+    Creates a function that access a member of the struct representing a class 
+  return-list is made of a sequence of the following "elements":
+   - N{$name_of_member} a number 
+        name is the varname that will contain it use _ for the return value
+   - B{$name_of_member} a boolean
+   - S{$name_of_member} a string
+   - L{$name_of_member} a lstring
+   - Name{$name_of_member} either an object of class "Name" or a Callback of type "Name"
+   
+  elems in argument-list can be:
+        N{$name_of_member;type;default} a number
+            - name the name of the variable
+            - type the optional type of the object (defaults to ``double'' )
+            - default an optional default value
+        B{$name_of_member;default}, a boolean
+        S{$name_of_member;default}, a string
+        L{$name_of_member;$len_name}, an lstring
+            - len_name is the name of the var that contains the length
+            - type     is the type of the variable (def to const char*)
+            - len_type is the type of the length variable (def to size_t) 
+        Name{$name_of_member;default}, 
 
 
 #CallBack <name>[{key}] <type-name> <mode:'key'|'closure'>:  <return-list> @ <arguments-list>
-   ...
-
-
+    #Callbacks are the opposite of #Functions and behave much like Classes
+     they create istances of function pointers to be passed as callbacks to C functions.
+     (They work as type for CCallBacks)
+     return and argument list are prety much inverted... retrun is what the Lua function will
+     return while arguments are those passed to the function.
+    arguments:
+    B{}
+    N{}
+    S{}
+    L{}
+    Name{}
+    X{}
+    return values:
+    B{}
+    N{}
+    S{}
+    L{}
+    Name{} 
+    U{name} for unused variables
+  
+  
+#CCallback <type-name> <name> <fn-name>
+  CCallBacks are C function pointers that can be passed to Functions taking CallBacks of the same type
+  
+  type-name: name of the CallBack that describes its interface
+  name: the name given to this function in Lua
+  fn-name: the name in C of the function
+  
+  
 #Alias <name-1> <name-2> (NYI)
   Creates an alias called <name-1> to the function called <name-2>
 <name-1>,<name-2>
@@ -146,10 +192,13 @@ elems in argument-list can be:
 
    <register-function-name> name given to the registration function
 
+#Break <linenum> [filename]
+Break and dump Relevant objects after processing the given line (must appear before that line)
 
 
 
-LuaQWrap's C code is directly derived from the code used to add Lua to
-Wireshark.
+
+LuaQWrap's C "runtime" is derived from the code used to add Lua to Wireshark. The Callback mechanism has being
+redesigned to deal with more generic scenarios. There's likely tons of bugs... verify the output (it's human readable C)!
 
 \Lego

@@ -524,7 +524,7 @@ do
 
     local function registration2C(fn_name) -- I yield C code for registration to Lua of classes and functions 
         local s = f("extern int %s(lua_State* L) {\n",fn_name)
-        local b =  "  lua_settop(L,0);\n  lua_newtable(L);\n"
+        local b =  "  lua_newtable(L);\n"
         for n,c in pairs(classes) do
         R(c)
             s = s .. F("  lual_Reg* %{name}_methods = {\n",c)
@@ -567,21 +567,27 @@ do
                  '    lua_pushcfunction(L,f->func); lua_setfield(L,1,f->name);\n  }\n\n'
         
         for name, v in pairs(values) do
+            R(v)
             b = b .. F('  push%{t}(L,(%{expr}));\n  lua_setfield(L,1,"%{name}");\n',v)
+            IR(v)
         end
         
         local cb = '  /* Register C Callbacks */\n  lua_newtable(L);\n'
             
         for tname, cbf in pairs(callbacks) do
+            R(cbf)
             cb = cb .. "   lua_newtable (L);\n"
             for name, ccb in pairs(cbf.c_cbs) do
+                R(ccb)
                 cb = cb .. f('     lwcRegCB(L, -1, "%s", %s,"%s");\n',name,ccb.fn_name,ccb.tname);
+                IR(ccb)
             end
             cb = cb .. f('    lua_setfield(L,1,"%s");\n',tname);
+            IR(cbf)
         end
         cb = cb .. '  lua_setfield(L,1,"_CallBacks")\n'
         
-        return s .. b .. cb .. "  return 1;\n}\n"
+        return R(s .. b .. cb .. "  return 1;\n}\n")
     end
     
     local a_idx

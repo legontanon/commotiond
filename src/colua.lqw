@@ -360,14 +360,16 @@ co_obj_t* co_str32_create(const char *input, const size_t input_size, const uint
 static void (*Str__gcoll)(Str*) = Obj__gcoll; // BUG In lqw
 
 static int intThru(int out);
-static int intThru(int out) { return out; }
+//static int intThru(int out) { return out; }
+#define intThru(o) (o) // triking lqw in believing this is a function...
 
 static int doubleThru(double out);
-static int doubleThru(double out) { double out; }
+//static int doubleThru(double out) { double out; }
+#define doubleThru(o) (o)
 
 static const char* strThru(const char* out);
-static const char* strThru(const char* out) { return out;}
-
+//static const char* strThru(const char* out) { return out;}
+#define strThru(o) (o)
 
 #define u64 co_uint64_create /* cheat for size */
 co_obj_t *u64(const uint64_t input, const uint8_t flags);
@@ -423,42 +425,42 @@ void (*Int64__gcoll)(Int64*) = Obj__gcoll; // BUG In lqw
 co_obj_t *i8(const uint8_t input, const uint8_t flags);
 #Function Int8.new_str i8: Int8{_} @ S{in} X{input;(uint8_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Int8.new_num i8: Int8{_} @ N{in} X{input;(uint8_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Int8.__call doubleThru: N{_} @ Int8{a} X{out;(double)a->data;double}
+#Function Int8.__call doubleThru: N{_} @ Int8{a} X{out;a->data;double}
 #Function Int8.__tostring strThru: S{_} @ Int8{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 
 #define i16 co_int16_create /* cheat for size */
 co_obj_t *i16(const uint16_t input, const uint8_t flags);
 #Function Int16.new_str i16: Int16{_} @ S{in} X{input;(uint16_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Int16.new_num i16: Int16{_} @ N{in} X{input;(uint16_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Int16.__call doubleThru: N{_} @ Int16{a} X{out;(double)a->data;double}
+#Function Int16.new_num i16: Int16{_} @ N{in} X{input;(uint16_t)floor(in);uint16_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int16.__call doubleThru: N{_} @ Int16{a} X{out;a->data;double}
 #Function Int16.__tostring strThru: S{_} @ Int16{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 #define i32 co_uint16_create /* cheat for size */
 co_obj_t *i32(const uint32_t input, const uint8_t flags);
 #Function Int32.new_str i32: Int32{_} @ S{in} X{input;(uint32_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Int32.new_num i32: Int32{_} @ N{in} X{input;(uint32_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Int32.__call doubleThru: N{_} @ Int16{a} X{out;(double)a->data;double}
+#Function Int32.new_num i32: Int32{_} @ N{in} X{input;(uint32_t)floor(in);uint32_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int32.__call doubleThru: N{_} @ Int16{a} X{out;a->data;double}
 #Function Int32.__tostring strThru: S{_} @ Int16{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 #define u8 co_uint8_create /* cheat for size */
 co_obj_t *u8(const uint8_t input, const uint8_t flags);
 #Function Uint8.new_str u8: Uint8{_} @ S{in} X{input;(uint8_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Uint8.new_num u8: Uint8{_} @ N{in} X{input;(uint8_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Uint8.__call doubleThru: N{_} @ Uint8{a} X{out;(double)a->data;double}
+#Function Uint8.__call doubleThru: N{_} @ Uint8{a} X{out;a->data;double}
 #Function Uint8.__tostring strThru: S{_} @ Uint8{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 #define u16 co_uint16_create /* cheat for size */
 co_obj_t *u16(const uint16_t input, const uint8_t flags);
-#Function Uint16.new_str u16: Uint16{_} @ S{in} X{input;(uint16_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Uint16.__call doubleThru: N{_} @ Uint16{a} X{out;(double)a->data;double}
+#Function Uint16.new_str u16: Uint16{_} @ S{in} X{input;(uint16_t)strtoul(in,NULL,10);uint16_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint16.__call doubleThru: N{_} @ Uint16{a} X{out;a->data;double}
 #Function Uint16.__tostring strThru: S{_} @ Uint16{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 #define u32 co_uint16_create /* cheat for size */
 co_obj_t *u32(const uint32_t input, const uint8_t flags);
-#Function Uint32.new_str u32: Uint32{_} @ S{in} X{input;(uint32_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint32.new_str u32: Uint32{_} @ S{in} X{input;(uint32_t)strtoul(in,NULL,10);uint32_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Uint32.new_num u32: Uint32{_} @ N{in} X{input;(uint32_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
-#Function Uint32.__call doubleThru: N{_} @ Uint16{a} X{out;(double)a->data;double}
+#Function Uint32.__call doubleThru: N{_} @ Uint16{a} X{out;a->data;double}
 #Function Uint32.__tostring strThru: S{_} @ Uint16{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 

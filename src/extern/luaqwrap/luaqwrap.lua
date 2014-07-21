@@ -282,9 +282,12 @@ do
     end
     
     
+    local idx_arg
     
     local farg_t2C = { -- function arguments for each Ts
         N=function(a) 
+            idx_arg = idx_arg + 1;
+            a.idx = idx_arg;
             test = a.name or EF("N-argument[%d] without a name",a.idx);
             local decl, input
             
@@ -299,6 +302,8 @@ do
             return decl, input
         end,
         B=function(a) 
+            idx_arg = idx_arg + 1;
+            a.idx = idx_arg;
             local decl, input
             test = a.name or EF("B-argument[%d] without a name",a.idx)
             
@@ -312,6 +317,8 @@ do
             return decl, input
         end,
         S=function(a)
+            idx_arg = idx_arg + 1;
+            a.idx = idx_arg;
             local decl, input
             test = a.name or EF("S-argument[%d] without a name",a.idx);
             decl = F("  const char* %{name}; /* arg[%{idx}] %{text} */\n",a)
@@ -323,7 +330,9 @@ do
             return decl, input
         end,
         L=function(a)
-            local decl, input
+           idx_arg = idx_arg + 1;
+           a.idx = idx_arg;
+           local decl, input
             test = a.name or EF("L-argument[%d] without a name",a.idx);
             test = a.len_name or EF("L-argument[%d] '%s' without len_name",a.idx,a.name)
             a.type = a.type or "const char*";
@@ -339,12 +348,14 @@ do
             test = a.type or EF("X-argument[%d] '%s' without a type",a.idx,a.name);
             test = a.value or EF("X-argument[%d] '%s' without a value",a.idx,a.name);
             
-            decl =  F("  %{type} %{name};  /* arg[%{idx}] %{text} */\n",a)
-            input = F("  %{name} = %{value};  /* arg[%{idx}] %{text} */\n",a)
+            decl =  F("  %{type} %{name};  /* X-arg: %{text} */\n",a)
+            input = F("  %{name} = (%{type})(%{value});  /* X-arg: %{text} */\n",a)
             return decl, input
         end,
         O=function(a) 
-            local decl, input
+           idx_arg = idx_arg + 1;
+           a.idx = idx_arg;
+           local decl, input
             test = a.name or EF("%s-argument[%d] '%s' without a name",a.type,a.idx);
             decl = F("  %{type}* %{name};  /* arg[%{idx}] %{text} */\n",a)
             
@@ -356,6 +367,8 @@ do
             return decl, input
         end,
         F=function(a)
+           idx_arg = idx_arg + 1;
+           a.idx = idx_arg;
             local decl, input
             
             local cb = callbacks[a.type] or EF("No such Callback '%s'",a.type);
@@ -370,15 +383,9 @@ do
             end
             return decl, input
         end,
-        K=function(a)
-            local decl, input
-            test =  a.name or EF("K-argument[%d] '%s' without a name",a.idx);
-            decl = F("  %{type} %{name};  /* arg[%{idx}] %{text} */\n",a)
-            input = F("  %{name} = checkF(L, %{idx}, %{cname});  /* arg[%{idx}] %{text} */\n",a)
-            return decl, input
-        end,
     }
-    
+            
+    local idx_ret
     local fret_t2C = { -- function returs for Ts
         N=function(r,m)
             test = r.name or EF("N-return[%d] without a name",r.idx);
@@ -420,7 +427,7 @@ do
             test = r.value or EF("X-return[%d] '%s' without a value",r.idx,r.name);
 
             local s1 = r.type and F("  %{type} %{name};\n",r) or ""
-            local s2 = F("  %{name} = %{value};  /* ret[%{idx}] %{text} */\n",r)
+            local s2 = F("  %{name} = (%{type})(%{value});  /* ret[%{idx}] %{text} */\n",r)
             return s1, s2
                 
         end;
@@ -437,6 +444,7 @@ do
         local call = ''
         local output = ''
         
+        idx_arg = 0
         for idx,arg in pairs(m.args) do
             local _d , _i =  farg_t2C[arg.t](arg,m)
             R(_d)
@@ -447,6 +455,7 @@ do
         
         local done_wit_ret = false
         
+        idx_ret = 0
         for idx,ret in pairs(m.rets) do
             local _d, _o = fret_t2C[ret.t](ret,m)
             if ret.name == '_' then done_wit_ret = true end

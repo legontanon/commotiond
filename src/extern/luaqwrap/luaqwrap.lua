@@ -385,25 +385,32 @@ do
         end,
     }
             
-    local idx_ret
     local fret_t2C = { -- function returs for Ts
         N=function(r,m)
+            idx_ret = idx_ret +1
+            r.idx = idx_ret
             test = r.name or EF("N-return[%d] without a name",r.idx);
             r.type = r.type or "luaNumber"
             return F("  %{type} %{name}; /* ret[%{idx}] %{text} */\n",r),
                 F("  pushN(L,%{name});  /* ret[%{idx}] %{text} */\n",r)
         end,
         S=function(r,m)
+            idx_ret = idx_ret +1
+            r.idx = idx_ret
             test = r.name or EF("S-return[%d] without a name",r.idx);
             return F("  const char* %{name}; /* ret[%{idx}] %{text} */\n",r),
                 F("  pushS(L,%{name});  /* ret[%{idx}] %{text} */\n",r)
         end,
         B=function(r,m)
+            idx_ret = idx_ret +1
+            r.idx = idx_ret
             test = r.name or EF("B-return[%d] without a name",r.idx);
             return F("  int %{name}; /* ret[%{idx}] %{text} */\n",r),
                 F("  pushB(L,%{name});  /* ret[%{idx}] %{text} */\n",r)
         end,
         L=function(r,m)
+            idx_ret = idx_ret +1
+            r.idx = idx_ret
             test = r.name or E("L-return without a name");
             test = r.len_name or EF("L-return '%s' without len_name",r.name)
             r.len_type = r.len_type or 'size_t';
@@ -417,6 +424,8 @@ do
                     F("  pushL(L, %{name}, %{len_name});  /* ret[%{idx}] %{text} */\n",r)
         end,
         O=function(r,m)
+            idx_ret = idx_ret +1
+            r.idx = idx_ret
             test = r.name or EF("%s-return[%d] without a name",r.type,r.idx);
             return F("  %{type}* %{name};  /* ret[%{idx}] %{text} */\n",r),
                 F("  push%{type}(L, %{name});  /* ret[%{idx}] %{text} */\n",r)

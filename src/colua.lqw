@@ -31,6 +31,7 @@
  */
 
 #Module Commotion static
+#Break 9999
 
 #include <sys/socket.h> // AF_INET
 #include <math.h> // floor(), log2()
@@ -57,7 +58,7 @@
    so that no objects will ever be created. Used just for naming functions */
 tyepdef struct dummy {int i;} dummy_t;
 
-// Effectivelly every real class is co_obj_t
+// in our implementation every real class is co_obj_t, may be something more...
 #Class Connection co_obj_t
 #Class Request co_obj_t
 #Class Response co_obj_t
@@ -67,8 +68,9 @@ tyepdef struct dummy {int i;} dummy_t;
 #Class Cmd co_str8_t
 #Class Process co_process_t
 #Class Profile co_obj_t
+#Class Schema co_obj_t
 
-#Class Soket co_socket_t
+#Class Socket co_socket_t
 #Class USocket co_socket_t
 #Class Fd co_fd_t
 
@@ -76,14 +78,24 @@ tyepdef struct dummy {int i;} dummy_t;
 #Class List co_obj_t
 
 #Class Str co_str32_t
-#Class Uint64 co_uint64_t
-#Class Int64 co_int64_t
 
+#Class Int64 co_int64_t
+#Class Int32 co_int32_t
+#Class Int16 co_int16_t
+#Class Int8 co_int8_t
+
+#Class Uint64 co_uint64_t
+#Class Uint32 co_uint32_t
+#Class Uint16 co_uint16_t
+#Class Uint8 co_uint8_t
+
+// some containers for functions that are not classes
 #OwnClass Node dummy_t
 #OwnClass Debug dummy_t
 #OwnClass Loop dummy_t
 
-// the "fake" class is co_obj_t as well...
+// the "fake" class is co_obj_t as well... 
+// Not a class realy but a catchall for all classes.
 #OwnClass Obj co_obj_t
 
 /****************************************************************/
@@ -137,7 +149,8 @@ static co_obj_t* toObj(lua_State* L, int idx) {
             return co_str32_create(s,len,COLUA_OWNFLAGS);
         } 
         case LUA_TUSERDATA:
-            return (co_obj_t*) lua_touserdata(L,idx);
+            return (co_obj_t*) lua_touserdata(L,idx); // XXX Broken which class?
+        
         case LUA_TTABLE: {
             Tree* tree  = co_tree32_create();
             for(lua_pushnil(L);lua_next(L,idx);lua_pop(L,1)) {
@@ -185,7 +198,7 @@ static co_obj_t* shiftObj(lua_State* L, int idx) {
     return *p;
 }
 
-static int gcObj(lua_State* L,int idx) {
+static int gcObj(lua_State* L,int idx) { // worthless...
     co_obj_t* o = NULL;
     
     if(lua_type(L,idx) == LUA_TUSERDATA) 
@@ -335,6 +348,8 @@ void Obj__gcoll(Obj* o) {
 
 
 
+co_obj_t* co_str32_create(const char *input, const size_t input_size, const uint8_t flags);
+
 #Function Str.create co_str32_create: Str{_} @ L{input;input_size} X{flags;COLUA_OWNFLAG;uint8_t}
 #Accessor Str.__tostring RO: L{$data;$_len}
 #Accessor Str.__len RO: N{$_len}
@@ -342,13 +357,15 @@ void Obj__gcoll(Obj* o) {
 #Function Str.__eq co_str_cmp: B{(_!=0)} @ Str{a} Str{b}
 #Function Str.__lt co_str_cmp: B{(_<0)} @ Str{a} Str{b}
 #Function Str.__le co_str_cmp: B{(_<=0)} @ Str{a} Str{b}
-static void (*Str__gcoll)(Str*) = Obj__gcoll;
+static void (*Str__gcoll)(Str*) = Obj__gcoll; // BUG In lqw
 
-
-static int intThru(int out); // lqw needs it
+static int intThru(int out);
 static int intThru(int out) { return out; }
 
-static const char* strThru(const char* out); // lqw needs it
+static int doubleThru(double out);
+static int doubleThru(double out) { double out; }
+
+static const char* strThru(const char* out);
 static const char* strThru(const char* out) { return out;}
 
 
@@ -358,6 +375,7 @@ co_obj_t *u64(const uint64_t input, const uint8_t flags);
 #Function Uint64.new_str u64: \
     Uint64{_} @ S{in} X{input;(uint64_t)strtoull(in,NULL,10);uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Uint64.new_num u64: Uint64{_} @ N{in} X{input;(uint64_t)floor(in);uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint64.__call doubleThru: N{_} @ Uint64{a} X{out;(double)a->data;double}
 
 #Function Uint64.__add u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data+b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Uint64.__sub u64: Uint64{_} @ Uint64{a} Uint64{b} X{input;a->data-b->data;uint64_t} X{flags;COLUA_OWNFLAG;uint8_t}
@@ -372,7 +390,7 @@ co_obj_t *u64(const uint64_t input, const uint8_t flags);
 #Function Uint64.__len intThru: N{_} @ Uint64{a} X{out;floor( log2(a->data) + 1 );int}
 #Function Uint64.__tostring strThru: S{_} @ Uint64{a} X{out;lwcFmt("%ull",a->data);const char*}
 
-void (*Uint64__gcoll)(Uint64*) = Obj__gcoll;
+void (*Uint64__gcoll)(Uint64*) = Obj__gcoll; // BUG In lqw
 
 
 
@@ -381,6 +399,7 @@ co_obj_t *i64(const int64_t input, const uint8_t flags);
 
 #Function Int64.new_str i64:Int64{_} @ S{in} X{input;(uint64_t)strtoull(in,NULL,10);int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Int64.new_num i64:Int64{_} @ N{in} X{input;(uint64_t)floor(in);int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int64.__call doubleThru: N{_} @ Int64{a} X{out;(double)a->data;double}
 
 #Function Int64.__add i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data+b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
 #Function Int64.__sub i64: Int64{_} @ Int64{a} Int64{b} X{input;a->data-b->data;int64_t} X{flags;COLUA_OWNFLAG;uint8_t}
@@ -395,8 +414,52 @@ co_obj_t *i64(const int64_t input, const uint8_t flags);
 #Function Int64.__len intThru: N{_} @ Int64{a} X{out;floor( log2(a->data) + 1 );int}
 #Function Int64.__tostring strThru: S{_} @ Int64{a} X{out;lwcFmt("%ull",a->data);const char*}
 
-void (*Int64__gcoll)(Int64*) = Obj__gcoll;
+void (*Int64__gcoll)(Int64*) = Obj__gcoll; // BUG In lqw
 
+
+
+
+#define i8 co_int8_create /* cheat for size */
+co_obj_t *i8(const uint8_t input, const uint8_t flags);
+#Function Int8.new_str i8: Int8{_} @ S{in} X{input;(uint8_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int8.new_num i8: Int8{_} @ N{in} X{input;(uint8_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int8.__call doubleThru: N{_} @ Int8{a} X{out;(double)a->data;double}
+#Function Int8.__tostring strThru: S{_} @ Int8{a} X{out;lwcFmt("%ull",a->data);const char*}
+
+
+#define i16 co_int16_create /* cheat for size */
+co_obj_t *i16(const uint16_t input, const uint8_t flags);
+#Function Int16.new_str i16: Int16{_} @ S{in} X{input;(uint16_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int16.new_num i16: Int16{_} @ N{in} X{input;(uint16_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int16.__call doubleThru: N{_} @ Int16{a} X{out;(double)a->data;double}
+#Function Int16.__tostring strThru: S{_} @ Int16{a} X{out;lwcFmt("%ull",a->data);const char*}
+
+#define i32 co_uint16_create /* cheat for size */
+co_obj_t *i32(const uint32_t input, const uint8_t flags);
+#Function Int32.new_str i32: Int32{_} @ S{in} X{input;(uint32_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int32.new_num i32: Int32{_} @ N{in} X{input;(uint32_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Int32.__call doubleThru: N{_} @ Int16{a} X{out;(double)a->data;double}
+#Function Int32.__tostring strThru: S{_} @ Int16{a} X{out;lwcFmt("%ull",a->data);const char*}
+
+#define u8 co_uint8_create /* cheat for size */
+co_obj_t *u8(const uint8_t input, const uint8_t flags);
+#Function Uint8.new_str u8: Uint8{_} @ S{in} X{input;(uint8_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint8.new_num u8: Uint8{_} @ N{in} X{input;(uint8_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint8.__call doubleThru: N{_} @ Uint8{a} X{out;(double)a->data;double}
+#Function Uint8.__tostring strThru: S{_} @ Uint8{a} X{out;lwcFmt("%ull",a->data);const char*}
+
+#define u16 co_uint16_create /* cheat for size */
+co_obj_t *u16(const uint16_t input, const uint8_t flags);
+#Function Uint16.new_str u16: Uint16{_} @ S{in} X{input;(uint16_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint16.__call doubleThru: N{_} @ Uint16{a} X{out;(double)a->data;double}
+#Function Uint16.__tostring strThru: S{_} @ Uint16{a} X{out;lwcFmt("%ull",a->data);const char*}
+
+#define u32 co_uint16_create /* cheat for size */
+co_obj_t *u32(const uint32_t input, const uint8_t flags);
+#Function Uint32.new_str u32: Uint32{_} @ S{in} X{input;(uint32_t)strtoul(in,NULL,10);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint32.new_num u32: Uint32{_} @ N{in} X{input;(uint32_t)floor(in);uint8_t} X{flags;COLUA_OWNFLAG;uint8_t}
+#Function Uint32.__call doubleThru: N{_} @ Uint16{a} X{out;(double)a->data;double}
+#Function Uint32.__tostring strThru: S{_} @ Uint16{a} X{out;lwcFmt("%ull",a->data);const char*}
 
 
 
@@ -405,7 +468,7 @@ void (*Int64__gcoll)(Int64*) = Obj__gcoll;
  * @param mac the MAC address of the devic
  * @param mac_size the size of the MAC address
  */
-#Function Node.set_id_from_mac co_id_set_from_mac: @ L{mac,mac_size}
+#Function Node.set_id_from_mac co_id_set_from_mac: @ L{mac;mac_size}
 
 /**
  * @brief Converts node id from host byte order to network byte order
@@ -416,7 +479,7 @@ void (*Int64__gcoll)(Int64*) = Obj__gcoll;
 /**
  * @brief Returns nodeid
  */
-#Function Node.get_id co_id_get: N{_->id} @
+#Function Node.get_id co_id_get: X{ret;_->id;uint32_t} N{ret} @ 
 
 /** @fn init
  * @brief initializes API
@@ -453,14 +516,14 @@ void (*Int64__gcoll)(Int64*) = Obj__gcoll;
  * @param request request object to append to
  * @param s string to append
  */
-#Function Request.append_str co_request_append_str: N{_} @ Request{request} L{s,slen}
+#Function Request.append_str co_request_append_str: N{_} @ Request{request} L{s;slen}
 
 /** @fn Request.append_bin(request, s)
  * @brief appends byte array to request
  * @param request request object to append to
  * @param s array to append
  */
-#Function Request.append_bin co_request_append_bin: N{_} @ Request{request} L{s,slen}
+#Function Request.append_bin co_request_append_bin: N{_} @ Request{request} L{s;slen}
 
 /** @fn Request.append_int(request, i)
  * @brief appends int to request
@@ -483,7 +546,7 @@ void (*Int64__gcoll)(Int64*) = Obj__gcoll;
  * @param request request object to send
  */
 #Function Connection.call co_call: \
-    Response{resp} N{_} @ Connection{} L{method,mlen} Request{request} X{resp;*response;Obj*}
+    Response{resp} N{_} @ Connection{} L{method;mlen} Request{request} X{resp;*response;Obj*}
 
 /** Response.__index(response, key)
  * @brief retrieve object from response
@@ -498,9 +561,10 @@ void (*Int64__gcoll)(Int64*) = Obj__gcoll;
 
 /** @fn Cmd.new(name)
  */
-#Function CmdKey.new(name) co_str8_create: CmdKey{_} @ L{input;input_size}
+co_obj_t* co_str8_create(const char* input, size_t input_size);
+#Function Cmd.new(name) co_str8_create: Cmd{_} @ L{input;input_size}
 
-LqwCbKeyStrElem(ProcRestartCB,CmdKey,data)
+LqwCbKeyStrElem(CmdCB,Cmd,data)
 #CallBack CmdCB{self} co_cb_t 0: Obj{if(output) *output} N{_} @ Cmd{self} List{params}
 
 /** @fn Cmd.register(key,usage,desc,handler)
@@ -510,44 +574,44 @@ LqwCbKeyStrElem(ProcRestartCB,CmdKey,data)
  * @param desc the description of command
  * @param handler the callback that handles the command
  */
-#Function CmdKey.register co_cmd_register: \
-    N{_} @ CmdKey{k} L{usage,ulen} L{desc,dlen} CmdCB{handler,name} X{name;k->data;const char*} X{nlen;k->_len;size_t}
+#Function Cmd.register co_cmd_register: \
+    N{_} @ Cmd{k} L{usage;ulen} L{desc;dlen} CmdCB{handler;name} X{name;k->data;const char*} X{nlen;k->_len;size_t}
 
 /** @fn CmdKey.exec
  * @brief executes a command by running the function linked to in the command struct
  * @param key the name of the command
  * @param output return object of command
  */
-#Function CmdKey.exec co_cmd_exec: Obj{out} N{_} @ CmdKey{key} Obj{param} X{output;&out;Obj**}
+#Function Cmd.exec co_cmd_exec: Obj{out} N{_} @ Cmd{key} Obj{param} X{output;&out;Obj**}
 
 /**
  * @brief returns command usage format
  * @param key command key
  */
-#Function CmdKey.usage co_cmd_usage: Obj{out} @ CmdKey{key}
+#Function Cmd.usage co_cmd_usage: Obj{out} @ Cmd{key}
 
 /** @fn CmdKey.desc(key)
  * @brief returns command description (what the command does)
  * @param key the name of the command
  */
-#Function CmdKey.desc co_cmd_desc: Obj{out} @ CmdKey{key}
+#Function Cmd.desc co_cmd_desc: Obj{out} @ Cmd{key}
 
 /**@fn Cmd.hook(key,cb)
  * @brief hooks callback function into a command
  * @param key the name of the command
  * @param cb callback function
  */
-#Function Cmd.hook co_cmd_hook: N{_} @ CmdKey{key} CmdCB{cb;key}
+#Function Cmd.hook co_cmd_hook: N{_} @ Cmd{key} CmdCB{cb;key}
 
 /**
  * @brief process all registered commands with given iterator
  * @param iter iterator function reference
  * @param context other parameters passed to iterator
  */
-#CallBack CmdIter co_iter_t NULL: Obj{_} @ CmdKey{current}
+#CallBack CmdIter co_iter_t NULL: Obj{_} @ Cmd{current}
 #Function Cmd.process co_cmd_process: N{_} @ CmdIter{iter} X{context;NULL;void*}
 
-void (*CmdKey__gc)(CmdKey*) =  co_obj_free;
+void (*CmdKey__gc)(CmdKey*) =  co_obj_free; //
 
 
 
@@ -566,20 +630,19 @@ void (*CmdKey__gc)(CmdKey*) =  co_obj_free;
  * @brief return length (number of objects) of given list
  * @param list list object
  */
-#Function List.__len co_list_len(list): N{_} @ List{list}
-size_t co_list_length(co_obj_t *list);
+#Function List.__len co_list_length: N{_} @ List{list}
 
 /**
  * @brief return first element of given list
  * @param list list object
  */
-#Funcion List.first co_list_get_first: Obj{_} @ List{list}
+#Function List.first co_list_get_first: Obj{_} @ List{list}
 
 /**
  * @brief return last element of given list
  * @param list list object
  */
-#Funcion List.last co_list_get_last: Obj{_} @ List{list}
+#Function List.last co_list_get_last: Obj{_} @ List{list}
 
 /**
  * @brief process list with given iterator function
@@ -587,7 +650,7 @@ size_t co_list_length(co_obj_t *list);
  * @param iter iterator function
  * @param context additional arguments to iterator
  */
-#CallBack ListIter co_iter_t NULL: Obj{_} @ Obj{current} U{context} U{data}
+#CallBack ListIter co_iter_t NULL: Obj{_} @ Obj{current} Obj{data} U{context} 
 #Function List.__call co_list_parse: Obj{_} @ List{list} ListIter{iter} X{context;NULL}
 
 /**
@@ -649,6 +712,12 @@ size_t co_list_length(co_obj_t *list);
  */
 #Function List.raw co_list_raw: L{output;_;524288} @ List{list} X{olen;524288;size_t}
 
+/** @method __tostring
+ * @brief returns a string representation of the list
+ */
+#Alias List.__tostring  List.raw
+
+
 /**
  * @brief import list from raw representation
  * @param list target pointer to new list object
@@ -657,11 +726,6 @@ size_t co_list_length(co_obj_t *list);
  */
 #Function List.import co_list_import: List{listo} @ L{input;ilen} X{list;&listo;List**}
 
-
-/** @method __tostring
- * @brief returns a string representation of the list
- */
-#Alias List.__tostring  List.raw
 
 
 
@@ -687,8 +751,8 @@ size_t co_list_length(co_obj_t *list);
  * @brief invokes cb for each interface
  * @param iter iterator taking the current interface and returning nothing
  */
-#Callback IfaceIter co_iface_iter_t: @ Iface{current} U{context} U{data}
-#Function Iface.foreach co_ifaces_foreach: @ IfaceIter{iter} X{ctx;NULL}
+#CallBack IfaceIter co_iface_iter_t: @ Iface{iface} U{context}
+#Function Iface.foreach co_ifaces_foreach: @ IfaceIter{iter} X{context;NULL}
 
 
 
@@ -703,8 +767,8 @@ size_t co_list_length(co_obj_t *list);
  * @param iface_name name of the interface
  * @param family address family of the interface. either AF_INET (IPv4) or AF_INET6 (IPv6), which uses host and port number for addressing
  */
-#Value Iface.AF_INET AF_INET  
-#Value Iface.AF_INET6 AF_INET6
+#Value Iface.AF_INET N: AF_INET  
+#Value Iface.AF_INET6 N: AF_INET6
 #Function Iface.add co_iface_add: Iface{_} @ S{iface_name} N{family;int;AF_INET}
 
 /** @fn Iface.wpa_connect(iface)
@@ -834,8 +898,8 @@ size_t co_list_length(co_obj_t *list);
 
 /** @method Iface.status()
   */
-#Value Iface.UP N{1}
-#Value Iface.DOWN N{0}
+#Value Iface.UP N: 1 
+#Value Iface.DOWN N: 0
 #Accessor Iface.status RO: N{$status}
 
 
@@ -936,12 +1000,14 @@ co_obj_t *co_loop_get_socket(char *uri, co_obj_t *context);
  * @param callback the function to be called at expirartion
  */
 LqwCbKeyPtr(TimerCB);
-#CallBack TimerCb{self} co_cb_t 0: Obj{if(output) *output} N{_} @ Timer{self} List{params}
+#CallBack TimerCB{self} co_cb_t 0: Obj{if(output) *output} N{_} @ Timer{self} List{params}
 #Function Timer.create co_timer_create:  Timer{_} @ \
-   S{name} N{tv;luaNumber} TimerCb{timer_cb} \
-   X{ptr;(void*)lqwPermStr(name);void*}    X{sec;(long)floor(tv);long} \
-   X{deadline;??<sec,(long)floor((tv-(double)sec)*1000000.00)??>;struct timeval} 
-           
+   S{name} N{tv;luaNumber}  \
+   X{ptr;(void*)lqwPermStr(name);void*} \
+   TimerCB{timer_cb;ptr}\
+   X{sec;(long)floor(tv);long} X{deadline;??<sec,(long)floor((tv-(double)sec)*1000000.00)??>;struct timeval} 
+/* using ??< and ??> for } and { BUG in LQW */
+
 /** @method timer.__tostring()
   */     
 #OwnFunction Timer.__tostring  
@@ -959,13 +1025,15 @@ LqwCbKeyStrElem(ProcInitCB,Process,name)
 LqwCbKeyStrElem(ProcDestroyCB,Process,name)
 LqwCbKeyStrElem(ProcStopCB,Process,name)
 LqwCbKeyStrElem(ProcRestartCB,Process,name)
-#CallBack ProcInitCB{self} process_idsr_cb: N{_} @ Process{self}
-#CallBack ProcDestroyCB{self} process_idsr_cb: N{_} @ Process{self}
-#CallBack ProcStopCB{self} process_idsr_cb: N{_} @ Process{self}
-#CallBack ProcRestartCB{self} process_idsr_cb: N{_} @ Process{self}
+#CallBack ProcInitCB{self} process_idsr_cb 0: N{_} @ Process{self}
+#CallBack ProcDestroyCB{self} process_idsr_cb 0: N{_} @ Process{self}
+#CallBack ProcStopCB{self} process_idsr_cb 0: N{_} @ Process{self}
+#CallBack ProcRestartCB{self} process_idsr_cb 0: N{_} @ Process{self}
 
 LqwCbKeyStrElem(ProcStartCB,Process,name)
-#OwnCallBack ProcStartCB{self} process_start_cb
+typedef int (*process_start_cb)(co_obj_t *self, char *argv[]);
+#OwnCallBack ProcStartCB process_start_cb
+
 static int callProcStartCB(co_obj_t *self, char *argv[]) {
     int r;
     const char* k = cbKeyProcStartCB((void*)self);
@@ -988,7 +1056,7 @@ static int callProcStartCB(co_obj_t *self, char *argv[]) {
   * all callbacks are passed the process object and return an integer (0 on success, else is fail)
   * start callback takes also a table of strings as second argument 
   */
-#OwnFunction Process.create Process_create
+#OwnFunction Process.create
 LQW_MODE int Process_create(lua_State* L) {
     co_process_t proto = {
         {  CO_FLAG_LUAGC,NULL,NULL,0,_ext8 },
@@ -1088,39 +1156,39 @@ Constructor Socket_get(lua_State*L) {
  *  status_int = register(socket,opt_ctx): 
 */
 LqwCbKeyStrElem(SocketInitCB,Socket,uri);
-#CallBack SocketInitCB{self} co_socket_init_cb_t: N{_} @ Socket{self}
+#CallBack SocketInitCB{self} co_socket_init_cb_t 0: N{_} @ Socket{self}
 
 LqwCbKeyStrElem(SocketDestroyCB,Socket,uri);
-#CallBack SocketDestroyCB{self} co_socket_destroy_cb_t: N{_} @ Socket{self}
+#CallBack SocketDestroyCB{self} co_socket_destroy_cb_t 0: N{_} @ Socket{self}
 
 LqwCbKeyStrElem(SocketHangUpCB,Socket,uri);
-#CallBack SocketHangUpCB{self} co_socket_hangup_cb_t: N{_} @ Socket{self} U{context}
+#CallBack SocketHangUpCB{self} co_socket_hangup_cb_t 0: N{_} @ Socket{self} U{context}
 
 LqwCbKeyStrElem(SocketBindCB,Socket,uri);
-#CallBack SocketBindCB{self} co_socket_bind_cb_t: N{_} @ Socket{self} S{endpoint}
+#CallBack SocketBindCB{self} co_socket_bind_cb_t 0: N{_} @ Socket{self} S{endpoint}
 
 LqwCbKeyStrElem(SocketConnectCB,Socket,uri);
-#CallBack SocketConnectCB{self} co_socket_connect_cb_t: N{_} @ Socket{self} S{endpoint}
+#CallBack SocketConnectCB{self} co_socket_connect_cb_t 0: N{_} @ Socket{self} S{endpoint}
 
 LqwCbKeyStrElem(SocketSendCB,Socket,uri);
-#CallBack SocketSendCB{self} co_socket_send_cb_t: N{_} @ Socket{self} L{outgoing;length}
+#CallBack SocketSendCB{self} co_socket_send_cb_t 0: N{_} @ Socket{self} L{outgoing;length}
 
 LqwCbKeyStrElem(SocketReceiveCB,Socket,uri);
-#CallBack SocketReceiveCB{self} co_socket_receive_cb_t: L{incoming;_;65536} @ Socket{self} Fd{fd} X{length;65536}
+#CallBack SocketReceiveCB{self} co_socket_receive_cb_t 0: L{incoming;_;65536} @ Socket{self} Fd{fd} X{length;65536}
 
 LqwCbKeyStrElem(SocketSetOptCB,Socket,uri);
-#Callback SocketSetOptCB{self} co_socket_setopt_bc_t: \
+#CallBack SocketSetOptCB{self} co_socket_setopt_cb_t 0: \
     N{_} @ Socket{self} N{level;int} N{option;int} L{optval;optvallen;void*;socklen_t}
 
 LqwCbKeyStrElem(SocketGetOptCB,Socket,uri);
-#CallBack SocketGetOptCB{self} co_socket_getopt_cb_t: \
+#CallBack SocketGetOptCB{self} co_socket_getopt_cb_t 0: \
    L{optval;_;65536} N{_} @ Socket{self} N{level;int} N{option;int} X{optvallen;65536;socklen_t}
 
 LqwCbKeyStrElem(SocketPollCB,Socket,uri)
-#CallBack SocketPollCB{self} co_socket_poll_cb_t: N{_} @ Socket{self} X{context}
+#CallBack SocketPollCB{self} co_socket_poll_cb_t 0: N{_} @ Socket{self} U{context}
 
 LqwCbKeyStrElem(SocketRegisterCB,Socket,uri)
-#CallBack SocketRegisterCB{self} co_socket_register_cb_t: N{_} @ Socket{self} U{context}
+#CallBack SocketRegisterCB{self} co_socket_register_cb_t 0: N{_} @ Socket{self} U{context}
 
 #OwnFunction Socket.create
 LQW_MODE int Socket_create(lua_State* L){
@@ -1232,14 +1300,14 @@ int co_socket_receive(co_obj_t * self, co_obj_t *fd, char *incoming, size_t leng
  * @param self socket name
  * @param endpoint specified endpoint for socket (file path)
  */
-#Function Socket.unix_bind unix_socket_bind: N{_} @ Socket{self} L{endpoint}
+#Function Socket.unix_bind unix_socket_bind: N{_} @ Socket{self} S{endpoint}
 
 /**
  * @brief connects a socket to specified endpoint
  * @param self socket name
  * @param endpoint specified endpoint for socket (file path)
  */
-#Function Socket.unix_connect unix_socket_connect: N{_} @ Socket{self} L{endpoint}
+#Function Socket.unix_connect unix_socket_connect: N{_} @ Socket{self} S{endpoint}
 
 //2do profile.h
 //2do tree.h
@@ -1276,7 +1344,7 @@ co_obj_t *co_node_value(_treenode_t *node);
  * @brief return length (number of key-value pairs) of given tree
  * @param tree tree object
  */
-#Function Tree.__length co_tree_length: L{_} @ Tree{tree}
+#Function Tree.__length co_tree_length: N{_} @ Tree{tree}
 
 /**
  * @brief return value from given tree that corresponds to key
@@ -1383,22 +1451,19 @@ Function Tree.__tostring co_tree_raw: L{output;_;256000} N{_} @ Tree{tree} X{ole
 
 
 
-typedef int (*co_cb_t)(co_obj_t *self, co_obj_t **output, co_obj_t *params);
-
-
-#CallBack SchemaCB{self} co_cb_t: Obj{out} @ Schema{self} Obj{params} X{output;&out;Obj**}
+#CallBack SchemaCB{self} co_cb_t NULL: Obj{out} @ Schema{self} Obj{params} X{output;&out;Obj**}
 
 /**
  * @brief register a callback for populating a profile schema
  * @param cb schema callback
  */
-#Function Schema.register co_schema_register: N{_} @ SchemaCB{cb}
+#Function Schema.register co_schema_register: N{_} @ SchemaCB{cb;k} X{k;lqwUuid();const char*}
 
 /**
  * @brief register a callback for populating global profile
  * @param cb schema callback
  */
-#Function Schema.register_global co_schema_register_global: N{_} @ SchemaCB{cb}
+#Function Schema.register_global co_schema_register_global: N{_} @ SchemaCB{cb;k} X{k;lqwUuid();const char*}
 
 /**
  * @brief load schemas for specified profile
@@ -1456,7 +1521,7 @@ typedef int (*co_cb_t)(co_obj_t *self, co_obj_t **output, co_obj_t *params);
  * @param name profile name
  * @param nlen length of profile name
  */
-#Function Profile.add co_profile_global: N{_} @ L{name;nlen}
+#Function Profile.add co_profile_global: N{_} @ 
 
 /**
  * @brief removes profile with given name
@@ -1568,10 +1633,15 @@ typedef int (*co_cb_t)(co_obj_t *self, co_obj_t **output, co_obj_t *params);
 
 
 LqwRealoc2lua_Alloc(colua_alloc,h_realloc,h_free);
-    
-static void init_globals(lua_State* L) {
-    nil_obj = co_nil_create(0);
-    lqwInit(colua_alloc,NULL);
+
+// prototype needed by lqw to know the function exists.
+static void Commotion_init(lua_State* L);
+
+static void Commotion_init(lua_State* L) {
+    if (nil_obj == NULL) {
+        nil_obj = co_nil_create(0);
+        lqwInit(colua_alloc,NULL);
+    }
 }
 
 #Finish co_lua_register

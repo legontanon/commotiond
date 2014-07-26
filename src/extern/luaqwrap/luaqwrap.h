@@ -17,7 +17,9 @@
 #define __LuaQWrap
 
 #include <math.h>
+#include <math.h>
 #include <stdio.h>
+#include <string.h>
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
@@ -35,16 +37,12 @@
 # define ROTBUF_NBUFS 16
 #endif 
 
-
-
-
-
 typedef struct lwcTblIt {
     int lua_type;
     union {
         int boolean;
         void* ptr;
-        luaNumber number;
+        lua_Number number;
         struct _str { const char* s; size_t slen; } string;
         struct lwcTblIt* table;
     } data;
@@ -70,9 +68,9 @@ typedef struct lwcTblIt {
 
 #define toN(L,i,T) ((T)lua_tonumber(L,(i)))
 #define checkN(L,i,T) ((T)luaL_checknumber(L,(i)))
-#define pushN(L,n) (lua_pushNumber(L,(luaNumber)n))
+#define pushN(L,n) (lua_pushNumber(L,(lua_Number)n))
 #define isN(L,i) (lua_isnumber(L,(i)))
-#define optN(L,i,T,D) ((T)luaL_optnumber(L,(i),(luaNumber)(D)))
+#define optN(L,i,T,D) ((T)luaL_optnumber(L,(i),(lua_Number)(D)))
 #define shiftN(L,i,T) //2do (fn)
 
 #define toB lua_toboolean
@@ -87,14 +85,15 @@ typedef struct lwcTblIt {
 #define isNil lua_isnil
 #define shiftNil(L,i) //2do (fn)
 
-#define isF(L,i) ((lua_type(L, i) == LUA_TFUNCTION) || lua_type(L, i) == LUA_TCFUNCTION))
-#define checkF(L,i,cb) ( (isF(L,i) || lwcArgErr(L,i,"Must Be a Function")) ? cb : NULL )
+#define isF(L,i) ((lua_type(L, i) == LUA_TFUNCTION) || lua_type(L, i) == LUA_TLIGHTUSERDATA)
+#define checkF(L,i,cb) ( (isF(L,i) || lqwArgError(L,i,"Must Be a Function")) ? cb : NULL )
 
 #define isLF(L,i) (lua_type(L, i) == LUA_TFUNCTION)
 #define isCF(L,i) (lua_type(L, i) == LUA_TCFUNCTION)
 
 #define pushCF lua_pushcfunction
 
+#define checkT(L,i) ( isT(L,i) ? 1 : lqwArgError(L,i,"Not a Table") )
 #define isT(L,i) (lua_type(L, i) == LUA_TTABLE)
 #define pushT lua_newtable
 
@@ -180,7 +179,7 @@ LQW_MODE C shift##C(DLI) { \
 } \
 LQW_MODE int dump#C(lua_State* L) { pushS(L,#C); R1; } \
 LQW_MODE C* opt#C(DLI,dflt) { retrun ( (lua_gettop(L)<idx || isNil(LI)) ? dflt : check##C(LI) )); R0;}}\
-LQW_MODE int C##___gc (luaState* L) { C#__gcoll(to##C(L,1)); return 0; } \
+LQW_MODE int C##___gc (lua_State* L) { C##__gcoll(to##C(L,1)); return 0; } \
 _End(C,ClassDefine)
 
 
@@ -196,9 +195,9 @@ LQW_MODE C* push##C(lua_State* L, C v) ; \
 LQW_MODE gboolean is##C(DLI) ; \
 LQW_MODE C shift##C(DLI) ; \
 LQW_MODE int dump#C(lua_State* L); \
-LQW_MODE C* opt#C(DLI,dflt);
-LQW_MODE int C##__gc (luaState* L)
-;
+LQW_MODE C* opt#C(DLI,dflt); \
+LQW_MODE int C##__gc (lua_State* L)
+
 
 /* @brief prototype for callback keying functions
  * @param cbname the name of the callback type
@@ -220,7 +219,7 @@ void lqwPcallErr(const char* name, int ret);
 /*
  * it creates the class and its tables and leaves it on top of the stack.
  */
-LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, luaL_Reg* meta);
+LQW_MODE int lqwClassCreate(lua_State* L, const char* name, luaL_Reg* methods, luaL_Reg* meta);
 
 /* ... to be added to a given table (idx)*/
 #define LqwClassRegister(C,idx) { lqwClassCreate(L,#C,C##_methods,C##_meta); lua_setfield(L,idx,#C); }
@@ -239,14 +238,13 @@ LQW_MODE const char* lqwFmt(const char *f, ...);
 LQW_MODE const char* lqwVFmt(const char *f, va_list);
 
 typedef struct VS {const char* s; int v;} VS;
-LQW_MODE const char* lqwV2S(VS* vs, int v, int def);
+LQW_MODE const char* lqwV2S(VS* vs, int v, const char*);
 LQW_MODE int lqwS2V(VS* vs, const char* s, int def);
 LQW_MODE int pushE(lua_State* L, int idx, VS* e); // 2do
 
 /* luaL_error() returns void... so it cannot be used in expressions... that sucks!
  * this one returns, so it can be used "inline" with &&, || and ?:
  */
-LQW_MODE int lqwError(lua_State* L, const char *f, ...); 
 LQW_MODE lua_State* lqwState(void);
 LQW_MODE int lqwCleanup(void);
 
@@ -255,10 +253,9 @@ LQW_MODE void lqw_getCb(lua_State* L, const char* cbk);
 LQW_MODE void lqw_setCb(lua_State* L, int idx, const char* cbk);
 LQW_MODE void lwqCheckCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[]) ;
 LQW_MODE void lwqSetCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[], void* self);
-LQW_MODE static void lqwSetFuncs(lua_State *L, const luaL_Reg *l, int nup);
+LQW_MODE void lqwSetFuncs(lua_State *L, const luaL_Reg *l, int nup);
 
-LQW_MODE lwcTblIt* ckeckT(luaState* L, int idx, size_t* np);
-LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, luaL_Reg* meta, lua_CFunction __gc);
+LQW_MODE lwcTblIt** ckeckT(lua_State* L, int idx, size_t* np);
 
 /*
  * RegisterFunction(name)
@@ -278,8 +275,10 @@ LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, lu
 #define Methods LQW_MODE const luaL_Reg
 #define Meta LQW_MODE const luaL_Reg
 
-int lqwError(luaState* L, const char* error);
-int lqwArgError(luaState* L, int idx, const char* error)
+LQW_MODE int lqwError(lua_State* L, const char* error);
+LQW_MODE int lqwErrorFmt(lua_State* L, const char *f, ...); 
+LQW_MODE int lqwArgError(lua_State* L, int idx, const char* error);
+LQW_MODE int lqwArgErrorFmt(lua_State* L, int idx,  const char *f, ...);
 
 /* for setting globals */
 #define setGlobalB(L,n,v) { pushB(L,v); lua_setglobal(L,n); }

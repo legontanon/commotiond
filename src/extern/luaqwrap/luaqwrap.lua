@@ -19,20 +19,21 @@ do
     local verbose = 6 -- I'm the verbosity level
     local own_prefix  = arg[0]:match("^(.*/)[%w_.]") or '' -- I hold the own prefix to the script (and its files)
     local module_name
-    local relevant = {} -- I'm a bag of relevant objects that will be dumped on an eventual error message
-
-    local function R(o) relevant[o] = o return o end -- this is relevant
-    local function IR(o) relevant[o] = nil return o end -- this is not relevant
-    local function resetR() relevant = {} end -- that's it nothing's relevant anymore!
-
+    
+    
+  
     -- shortcuts
     local E = error -- the error function (will likely change at each line read)
     local f = string.format
     string.f = string.format
-    local function EF(...) return E(f(...)) end
     local M = string.match
     string.M = M
     
+    function EF(...) return E(f(...)) end
+    function Fmt(fn) return function(...) return fn(f(...)) end end 
+
+    
+
     function table.top(t) return t[#t] end
     function table.shift(t) return t:remove(1) end
     table.pop = table.remove
@@ -40,7 +41,13 @@ do
     
     local lqw_cmd = {}; --  //LW: commands execution
     local mode = 'static'
-
+    
+    local _R = {} -- I'm a bag of relevant objects that will be dumped on an eventual error message
+    local function R(o) _R[o] = o return o end -- this is relevant
+    local function IR(o) _R[o] = nil return o end -- this is not relevant
+    local function NRA() _R = {} end -- nothing's relevant anymore!
+    local DR -- DR() dump what's relevant (defined bellow)
+    
     local function dup_to(t,n,s) -- I create tables that will copy to the given table (err if key exists)
         -- used to guarantee uniqueness of names between different tables, or if called as dup_to({}) a single table
         n = n or E("dup_to without name")
@@ -185,6 +192,16 @@ do
         return s .. oi .. "}"
     end
 
+    
+    DR = function()
+        local s = ''
+        
+        for _i, r in pairs(_R) do
+            s = s .. "\n" .. v2s(r) .. "\n"
+        end
+        
+        return s
+    end
     
     -- LW tools:
     local dump = print
@@ -390,7 +407,7 @@ do
             idx_ret = idx_ret +1
             r.idx = idx_ret
             test = r.name or EF("N-return[%d] without a name",r.idx);
-            r.type = r.type or "luaNumber"
+            r.type = r.type or "lua_Number"
             return F("  %{type} %{name}; /* ret[%{idx}] %{text} */\n",r),
                 F("  pushN(L,%{name});  /* ret[%{idx}] %{text} */\n",r)
         end,
@@ -594,7 +611,7 @@ do
 
     local cb_arg_t = {
         B=function(a) a_idx = a_idx + 1;  a.idx = a_idx; return F("  pushB(L,(int)%{name}); /* arg[%{idx}] %{text} */\n",a) end,
-        N=function(a) a_idx = a_idx + 1;  a.idx = a_idx; return F("  pushN(L,(luaNumber)%{name}); /* arg[%{idx}] %{text} */\n",a) end,
+        N=function(a) a_idx = a_idx + 1;  a.idx = a_idx; return F("  pushN(L,(lua_Number)%{name}); /* arg[%{idx}] %{text} */\n",a) end,
         O=function(a) a_idx = a_idx + 1;  a.idx = a_idx; return F("  push%{type}(L,%{name}); /* arg[%{idx}] %{text} */\n",a) end,
         F=function(a) a_idx = a_idx + 1;  a.idx = a_idx; return F("  push%{type}(L,%{name}); /* arg[%{idx}] %{text} */\n",a) end,
         S=function(a) a_idx = a_idx + 1;  a.idx = a_idx; return F("  pushS(L,%{name}); /* arg[%{idx}] %{text} */\n",a) end,
@@ -631,7 +648,7 @@ do
             if a.name == '_' then 
                 a.type = a.type or m.proto.type
             else
-                a.type = a.type or "luaNumber"            
+                a.type = a.type or "lua_Number"            
             end
             
             return a.name:M('^[%a][%w_]*$') and F("  %{type} %{name};  /* ret[%{idx}] %{text} */\n",a) or "",
@@ -1030,7 +1047,7 @@ do
                     if a.t == 'S' then
                         a.type = 'const char*'
                     elseif a.t == 'N' then
-                        a.type = 'luaNumber'
+                        a.type = 'lua_Number'
                     elseif a.t == 'U' then
                         a.type = 'void'
                     else
@@ -1097,7 +1114,7 @@ do
     end
     
     local function lwcmd(lwc,frame,stack)
-        resetR()
+        NRA()
         local cmd,params,val = lwc:match("(%u[%w]+)%s*([^:]*)[:]?%s*(.*)%s*")
         R({lwc=lwc,frame=frame})
         
@@ -1159,9 +1176,7 @@ do
                     local s = f('%s:%d: error: "%s"\nLine:%s\n',frame.filename,frame.ln,str,v2s(line))
                                 .. debug.traceback() .. "\n"
                     if verbose > 0 then
-                        for i, r in pairs(relevant) do
-                            s = s .. "\n" .. v2s(r) .. "\n"
-                        end
+                        s = s .. DR()
                     end
                     
                     log(0,s)

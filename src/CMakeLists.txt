@@ -28,11 +28,11 @@ ADD_CUSTOM_COMMAND(
     OUTPUT
       colua.c
     COMMAND ${LUA_EXECUTABLE}
-      ${CMAKE_CURRENT_SOURCE_DIR}/extern/luaqwrap.lua
-      ${CMAKE_CURRENT_SOURCE_DIR}/colua.lwq
+      ${CMAKE_CURRENT_SOURCE_DIR}/extern/luaqwrap/luaqwrap.lua
+      ${CMAKE_CURRENT_SOURCE_DIR}/colua.lqw
       ${CMAKE_CURRENT_BINARY_DIR}/colua.c
     DEPENDS
-      ${CMAKE_CURRENT_SOURCE_DIR}/colua.lwq
+      ${CMAKE_CURRENT_SOURCE_DIR}/colua.lqw
       ${CMAKE_CURRENT_SOURCE_DIR}/extern/luaqwrap/luaqwrap.lua
       ${CMAKE_CURRENT_SOURCE_DIR}/extern/luaqwrap/luaqwrap.h
       ${CMAKE_CURRENT_SOURCE_DIR}/extern/luaqwrap/luaqwrap.c

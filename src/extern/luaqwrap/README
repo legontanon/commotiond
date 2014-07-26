@@ -168,17 +168,19 @@ elems in argument-list can be:
 #CCallback <type-name> <name> <fn-name>
   CCallBacks are C function pointers that can be passed to Functions taking CallBacks of the same type
   
-  type-name: name of the CallBack that describes its interface
+  type-name: name of the CallBack that describes its interface (the type)
   name: the name given to this function in Lua
   fn-name: the name in C of the function
   
-  
+
 #Alias <name-1> <name-2> (NYI)
   Creates an alias called <name-1> to the function called <name-2>
-<name-1>,<name-2>
+  
+  <name-1>,<name-2>
         "ClassName.method_name" for a method,
         "ClassName.__meta_name" for a metamethod
         "function_name" for funtions not belonging to any class.
+
 
 
 #ProcFile <in-file> [out-file] (NYI)
@@ -187,13 +189,18 @@ elems in argument-list can be:
     <out-file> if mode is 'extern' the output of this lwfile will go to this file,
                instead of the main output one, error if "static"
 
+
+
 #Finish <register-function-name>
    Adds the  registration function (that is later invoked by Lua to create the classes)
 
    <register-function-name> name given to the registration function
 
+
+
 #Break <linenum> [filename]
-Break and dump Relevant objects after processing the given line (must appear before that line)
+    Break execution and dump Relevant objects to log and stderr after processing the given line
+    (the directive must appear before that line), the target will be processed until that point.
 
 
 

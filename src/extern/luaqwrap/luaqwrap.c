@@ -52,12 +52,13 @@ LQW_MODE int lqwCleanup(void) {
 
 LQW_MODE int lqwNop(lua_State* L) { return 0; }
 
-LQW_MODE lua_State* lqwState(void) { return L; }
+LQW_MODE lua_State* lqwState(void) { return gL; }
 
 LQW_MODE const char* lqwVFmt(const char *f, va_list a) { 
     static char b[ROTBUF_NBUFS][ROTBUF_MAXLEN];
-    static int i = 0; 
-    vsnprintf(s, ROTBUF_MAXLEN, f, a);
+    static int i = 0;
+    char* s = b[(i++)%ROTBUF_NBUFS];
+    vsnprintf( s , ROTBUF_MAXLEN, f, a);
     return s;
 }
 
@@ -70,7 +71,7 @@ LQW_MODE const char* lqwFmt(const char *f, ...)  {
     return r;
 }
 
-LQW_MODE const char* lqwV2S(VS* vs, int v, int def) {
+LQW_MODE const char* lqwV2S(VS* vs, int v, const char* def) {
     for (;vs->s;vs++)
         if (vs->v == v)
             return vs->s;
@@ -84,8 +85,8 @@ LQW_MODE int lqwS2V(VS* vs, const char* s, int def) {
     return def;
 }
 
-LQW_MODE const gchar* lua_shiftstring(lua_State* L, int i) {
-    const gchar* p = luaL_checkstring(L, i);
+LQW_MODE const char* lua_shiftstring(lua_State* L, int i) {
+    const char* p = luaL_checkstring(L, i);
 
     if (p) {
         lua_remove(L,i);
@@ -97,29 +98,32 @@ LQW_MODE const gchar* lua_shiftstring(lua_State* L, int i) {
 
 LQW_MODE void lqw_getCb(lua_State* L, const char* cbk) {
     getReg(cbk);
-    checkF(L,-1);
 }
 
 LQW_MODE void lqw_setCb(lua_State* L, int idx, const char* cbk) {
-    checkF(L,-1);
-    setReg(L,cbk);
+    checkF(L,-1,NULL);
+    setReg(cbk);
 }
 
 LQW_MODE void lwqCheckCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[]) {
     checkT(L,idx);
-    for(lua_pushnil(L);lua_next(L,idx) && *cbKeys;lua_pop(L,1)) checkF(L,-1);
+    for(lua_pushnil(L);lua_next(L,idx) && *cbKeys; lua_pop(L,1)) checkF(L,-1,NULL);
     lua_pop(L,1);
 }
 
 LQW_MODE void lwqSetCbsTbl(lua_State* L, int idx, lqwCbKey* cbKeys[], void* self) {
+    int i = 0;
+    
     checkT(L,idx);
-    for(lua_pushnil(L);lua_next(L,idx) && *cbKeys;)
-        lqw_setCb(L,-1,(*(cbKeys++))(self));
+    
+    lua_pushnil(L);
+    while(lua_next(L,idx) && cbKeys[i])
+        lqw_setCb(L,-1,(*cbKeys[i++])(self));
     lua_pop(L,1);
 }
 
 /* following is based on the luaL_setfuncs() from Lua 5.2, so we can use it in pre-5.2 */
-LQW_MODE static void lqwSetFuncs(lua_State *L, const luaL_Reg *l, int nup) {
+LQW_MODE void lqwSetFuncs(lua_State *L, const luaL_Reg *l, int nup) {
   luaL_checkstack(L, nup, "too many upvalues");
   for (; l->name != NULL; l++) {  /* fill the table with given functions */
     int i;
@@ -131,7 +135,7 @@ LQW_MODE static void lqwSetFuncs(lua_State *L, const luaL_Reg *l, int nup) {
   lua_pop(L, nup);  /* remove upvalues */
 }
 
-LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, luaL_Reg* meta) {
+LQW_MODE int lqwClassCreate(lua_State* L, const char* name, luaL_Reg* methods, luaL_Reg* meta) {
     /* create new class method table and 'register' the class methods into it */ 
     lua_newtable (L);
     lqwSetFuncs (L, methods, 0);
@@ -153,28 +157,56 @@ LQW_MODE int lqwClassCreate(luaState* L, const char* name, luaL_Reg* methods, lu
     return 1;
 }
 
-LQW_MODE void lqwInit(alloc,alloc_data) {
-    gL = lua_newstate(alloc,alloc_data);
+
+LQW_MODE void lqwInit(lua_Alloc alloc,void* alloc_data) {
+    gL = lua_newstate(alloc, alloc_data);
 }
 
-int lqwError(luaState* L, const char* error) { luaL_error(L, error ); return 0; }
-int lqwArgError(luaState* L, int idx, const char* error) { luaL_argerror(L,idx,error); return 0; } 
+int lqwError(lua_State* L, const char* error) {
+    luaL_error(L, error );
+    return 0;
+}
 
-void lqwPcallErr(const char* name, int ret) {
+int lqwErrorFmt(lua_State* L, const char* fmt, ...) {
+    va_list a;
+    
+    va_start(a, fmt);
+    luaL_error(L, lqwVFmt(fmt,a) );
+    va_end(a);
+    return 0;
+}
+
+int lqwArgError(lua_State* L, int idx, const char* error) {
+    luaL_argerror(L,idx,error);
+    return 0;
+}
+
+int lqwArgErrorFmt(lua_State* L, int idx, const char* fmt, ...) {
+    va_list a;
+    
+    va_start(a, fmt);
+    luaL_argerror(L,idx, lqwVFmt(fmt,a) );
+    va_end(a);
+    return 0;
+}
+
+
+
+
+void LqwPcallErr(const char* name, int ret, void (*errh_cb)(const char* name,const char* what,const char* where) ) {
     const char* what;
     const char* where;
     // 2do Error Handler (why!)
 
-    what = toS(L,-1);
+    what = toS(gL,-1);
     
-    luaL_where(L, 0);
-    where = toS(L,-1);
-    lua_pop(L,2);
+    luaL_where(gL, 0);
+    where = toS(gL,-1);
+    lua_pop(gL,2);
     
-    ERROR("%s %s",what,where);
-    
-    error: return;
+    errh_cb(name,what,where);
 }
+
 
 void* checkCB(lua_State* L, int idx, void* lua_cb, lqwCbKey cbKey_cb, void* key_ptr, char* tname) {
     int lt = lua_type(L, idx);
@@ -195,7 +227,7 @@ void* checkCB(lua_State* L, int idx, void* lua_cb, lqwCbKey cbKey_cb, void* key_
         lua_getfield(L, LUA_REGISTRYINDEX,fn);
         
         if (lua_type(L,-1) != LUA_TSTRING) {
-            lwcArgError(L,idx,"function pointer given is not a registered callback"));
+            lqwArgError(L,idx,"function pointer given is not a registered callback");
             return NULL;
         }
         
@@ -203,19 +235,19 @@ void* checkCB(lua_State* L, int idx, void* lua_cb, lqwCbKey cbKey_cb, void* key_
         lua_pop(L,1); // keep the stack balanced
         
         if (strcmp(t,tname) != 0) {
-            lwcArgError(L,idx,"pointer is not a valid callback for this type"));
+            lqwArgError(L,idx,"pointer is not a valid callback for this type");
             return NULL;
         }
         
         return fn;
     } else {
-        lwcArgError(L,idx,"argument is neither a function nor a function pointer"));
+        lqwArgError(L,idx,"argument is neither a function nor a function pointer");
         return NULL;
     }
 }
 
 
-LQW_MODE void regCB(luaState* L, int idx, const char* name, void* cb_ptr, const char* tname) {
+LQW_MODE void regCB(lua_State* L, int idx, const char* name, void* cb_ptr, const char* tname) {
     /* we register callbacks by keeping its type_name saved under the callback's pointer as key,
        that way we can check that we are passed a pointer to a right kind of function. */
     pushS(L,tname);
@@ -226,7 +258,7 @@ LQW_MODE void regCB(luaState* L, int idx, const char* name, void* cb_ptr, const 
 }
 
 
-LQW_MODE void pushTS(luaState* L, const char* t[], size_t n) {
+LQW_MODE void pushTS(lua_State* L, const char* t[], size_t n) {
     int i;
     lua_newtable(L);
     for(i = 0; (n==0 || i<n) && t[i];) {
@@ -235,20 +267,20 @@ LQW_MODE void pushTS(luaState* L, const char* t[], size_t n) {
     }
 }
 
-LQW_MODE const char** checkTS(luaState* L, int idx, const char** t, size_t n) {
+LQW_MODE const char** checkTS(lua_State* L, int idx, const char** t, size_t n) {
     unsigned i = 0;
     
     if (lua_type(L, idx) == LUA_TTABLE) {
-        for (lua_pushnil(); i<n ** t[i] && lua_next(L,idx); lua_pop(L,1), i++) {
+        for (lua_pushnil(L); i<n && t[i] && lua_next(L,idx); lua_pop(L,1), i++) {
             if (lua_type(L,-1) != LUA_TSTRING) {
-                lwcArgError(L,idx,"a table element is not a string");
+                lqwArgError(L,idx,"a table element is not a string");
                 return t;
             }
             t[i] = toS(L,-1);
         }
         lua_pop(L,1);
     } else {
-        lwcArgError(L,idx,"not a table");
+        lqwArgError(L,idx,"not a table");
     }
     
     return t;
@@ -256,23 +288,24 @@ LQW_MODE const char** checkTS(luaState* L, int idx, const char** t, size_t n) {
 
 #define MAX_TABLE_ITEMS 1024
 
-lwcTblIt* ckeckT(luaState* L, int idx, size_t* np) {
+LQW_MODE lwcTblIt** ckeckT(lua_State* L, int idx, size_t* np) {
     static lwcTblIt* a[MAX_TABLE_ITEMS];
     int i = 0;
-    memset(a, int c, sizeof(lwcTblIt));
+    
+    memset(a, 0, sizeof(lwcTblIt));
 
     
     if (lua_type(L, idx) != LUA_TTABLE) {
-        lwcArgError(L,idx,"not a table");
+        lqwArgError(L,idx,"not a table");
         return NULL;
     }
     
-    for (lua_pushnil(); lua_next(L,idx); lua_pop(L,1)) {
+    for (lua_pushnil(L); lua_next(L,idx); lua_pop(L,1)) {
         lwcTblIt* it = a[i++];
         if (i >= MAX_TABLE_ITEMS) break;
-        it->type = lua_type(L,-1);
-        switch(it->type) {
-            case LUA_NIL:
+        
+        switch((it->lua_type = lua_type(L,-1))) {
+            case LUA_TNIL:
                 break;
             case LUA_TBOOLEAN:
                 it->data.boolean = toB(L,-1);
@@ -282,10 +315,10 @@ lwcTblIt* ckeckT(luaState* L, int idx, size_t* np) {
                 it->data.ptr = lua_touserdata(L,-1);
                 break;
             case LUA_TNUMBER:
-                it->data.number = toN(L,-1);
+                it->data.number = toN(L,-1,lua_Number);
                 break;
             case LUA_TSTRING:
-                it->data.str.s = checkL(L,-1,it->data.str.slen)
+                it->data.string.s = checkL(L,-1,&(it->data.string.slen));
             default:
                 i--;
                 break;
